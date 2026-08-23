@@ -287,7 +287,7 @@ const state={
   searchQuery:'',
   extensions:[],
   projectJson:null, projectDirty:false,
-  settings:LS.get('settings',{ theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false }),
+  settings:LS.get('settings',{ theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth' }),
   monaco:null, monacoReady:false, editor:null,
   paletteMode:'cmd', paletteItems:[], paletteSel:0,
 };
@@ -803,7 +803,6 @@ function renderSettings(body){
     +setRow('lineNumbers','Line Numbers','show line numbers','<span class="switch '+(s.lineNumbers?'on':'')+'" id="st-line"></span>')
     +setRow('bracketPairColorization','Bracket Color','colorize pairs','<span class="switch '+(s.bracketPairColorization?'on':'')+'" id="st-brk"></span>')
     +setRow('cursorBlinking','Cursor Blink','style','<select id="st-cur"><option '+(s.cursorBlinking==='blink'?'selected':'')+'>blink</option><option '+(s.cursorBlinking==='smooth'?'selected':'')+'>smooth</option><option '+(s.cursorBlinking==='phase'?'selected':'')+'>phase</option><option '+(s.cursorBlinking==='solid'?'selected':'')+'>solid</option></select>')
-    +setRow('formatOnSave','Format On Save','format JSON files on save','<span class="switch '+(s.formatOnSave?'on':'')+'" id="st-fos"></span>')
     +'<div class="divider"></div><div class="sec-title">Reset</div><button class="btn sm block" onclick="ui.resetSettings()">↺ Reset to defaults</button>'
     +'<div class="divider"></div><div class="sec-title">Data</div><button class="btn sm block danger" onclick="ui.clearAllData()">🗑 Clear All Data</button>';
   $('#st-theme').onchange=e=>{s.theme=e.target.value;persistSettings();applyTheme(s.theme);};
@@ -818,9 +817,8 @@ function renderSettings(body){
   sw('#st-line',v=>{s.lineNumbers=v;persistSettings();applyEditorSettings();});
   sw('#st-brk',v=>{s.bracketPairColorization=v;persistSettings();applyEditorSettings();});
   $('#st-cur').onchange=e=>{s.cursorBlinking=e.target.value;persistSettings();applyEditorSettings();};
-  sw('#st-fos',v=>{s.formatOnSave=v;persistSettings();});
 }
-function resetSettings(){state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false};persistSettings();applyTheme('ban-dark');applyEditorSettings();renderSidebar();renderStatusbar();toast('Settings reset to defaults','success');}
+function resetSettings(){state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth'};persistSettings();applyTheme('ban-dark');applyEditorSettings();renderSidebar();renderStatusbar();toast('Settings reset to defaults','success');}
 
 /* ---------- menus ---------- */
 let _openMenu=null;
@@ -964,12 +962,8 @@ const ui={
   save(){
     const f=currentOpen();if(!f)return toast('No file open','info');
     let content=f.content;
-    // Format JSON on save if enabled
-    if(state.settings.formatOnSave&&langFromName(f.name)==='json'){
-      try{content=JSON.stringify(JSON.parse(content),null,state.settings.tabSize);}catch(e){}
-    }
     download(f.name,content);f.content=content;f.modified=false;renderTabs();renderStatusbar();toast('Saved '+f.name,'success');
-    // also sync back into project tree
+    // sync back into project tree
     const node=findNode(state.fileList,f.id);
     if(node){node.content=content;state.projectDirty=true;renderStatusbar();}
   },
@@ -989,13 +983,12 @@ const ui={
   about(){toast('🚫 Ban Code v2.0 — extension-powered editor','info');openModal('<h2>🚫 Ban Code v2.0</h2><p>A lightweight, extension-powered code editor that runs in a single HTML file.<br>Extensions are plain .json files you can install and uninstall.</p><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
   exec(a){if(a==='undo'&&state.editor)state.editor.trigger('','undo');if(a==='redo'&&state.editor)state.editor.trigger('','redo');if(a==='find'&&state.editor)state.editor.trigger('','actions.find');if(a==='replace'&&state.editor)state.editor.trigger('','editor.action.startFindReplaceAction');},
   zoom(d){const n=Math.max(8,Math.min(40,(state.settings.fontSize||14)+d));state.settings.fontSize=n;persistSettings();applyEditorSettings();renderStatusbar();
-    // update settings panel if visible
     const fontInput=$('#st-font');if(fontInput)fontInput.value=n;},
   resetZoom(){state.settings.fontSize=14;persistSettings();applyEditorSettings();renderStatusbar();
     const fontInput=$('#st-font');if(fontInput)fontInput.value=14;},
   resetSettings(){resetSettings();},
   closeModal(){closeModal();},
-  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false};if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildSnippets();rebuildKeybindings();rebuildCommands();buildMenus();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
+  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth'};if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildSnippets();rebuildKeybindings();rebuildCommands();buildMenus();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
   exportZip(){exportZip();},
 };
 function download(name,content){const b=new Blob([content],{type:'text/plain'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
