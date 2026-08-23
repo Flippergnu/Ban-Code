@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🚫 Ban Code — Extension-Powered Editor</title>
+<!-- Monaco Editor (CDN; internet needed on first load) -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<style>
+  :root{
+    --bg:#1e1e1e; --sidebar:#252526; --activity:#333333; --border:#2a2a2a;
+    --titlebar:#252333; --accent:#007acc; --fg:#cccccc; --dim:#858585;
+    --muted:#6b6b6b;
+    --hover:rgba(255,255,255,.06); --hoverStrong:rgba(255,255,255,.12); --hoverBtn:rgba(255,255,255,.16);
+    --card:#2d2d2d; --cardBorder:#3a3a3a; --inputBg:#3c3c3c; --inputBorder:#454545;
+    --selectBg:#094771; --scrollbar:#424242; --scrollbarHover:#4f4f4f;
+    --termBg:#161616; --termHead:#2d2d2d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg);font-size:13px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:5px;transition:background 0.2s ease}
+  ::-webkit-scrollbar-thumb:hover{background:var(--scrollbarHover)}
+  button{cursor:pointer;background:none;border:none;color:inherit;font:inherit;transition:background 0.12s ease,transform 0.1s ease}
+  button:active{transform:scale(0.97)}
+  input,select,textarea{font:inherit}
+  .muted{color:var(--dim)}
+  #app{height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+
+  /* Title bar */
+  #titlebar{height:34px;background:var(--titlebar);display:flex;align-items:center;padding:0 8px;flex-shrink:0;user-select:none;position:relative;z-index:20}
+  .brand{font-weight:600;color:var(--fg);font-size:12px;display:flex;align-items:center;gap:6px;min-width:0}
+  .brand .logo{width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,#007acc,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+  #docname{color:var(--dim);font-size:12px;margin-left:6px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #menubar{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:1px}
+  #menubar>button{padding:5px 10px;border-radius:4px;font-size:12px;color:var(--fg);position:relative}
+  #menubar>button:hover,#menubar>button.open{background:var(--hoverStrong)}
+  .dropdown{position:absolute;top:100%;left:50%;transform:translateX(-50%);transform-origin:top center;animation:dropIn 0.15s ease;background:var(--sidebar);border:1px solid var(--inputBorder);border-radius:6px;min-width:250px;padding:4px;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  .menu-item{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:4px;font-size:13px;color:var(--fg);width:100%;text-align:left}
+  .menu-item:hover{background:var(--selectBg);color:#fff}
+  .menu-item.disabled{opacity:.4;pointer-events:none}
+  .menu-item .label{flex:1}
+  .menu-item .kbd{font-size:11px;color:var(--dim)}
+  .menu-item .ic{width:16px;text-align:center;flex-shrink:0}
+  .menu-sep{height:1px;background:var(--border);margin:4px 6px}
+  #winbtns{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pillow{font-size:11px;padding:2px 9px;border-radius:12px;background:var(--hover);color:var(--dim)}
+
+  #main{flex:1;display:flex;min-height:0}
+
+  /* Activity bar */
+  #activitybar{width:46px;background:var(--activity);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding-top:8px;flex-shrink:0}
+  .ab-wrap{position:relative}
+  .act{width:40px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);position:relative;font-size:17px;margin-bottom:2px;transition:all 0.15s ease}
+  .act:hover{color:var(--fg);background:var(--hover)}
+  .act.active{color:var(--fg);background:var(--hoverStrong)}
+  .act.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--accent);border-radius:2px}
+  .act-tip{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:9px;background:var(--card);border:1px solid var(--inputBorder);padding:3px 8px;border-radius:4px;font-size:11px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:600;color:var(--fg)}
+  .ab-wrap:hover .act-tip{opacity:1}
+  #activitybar .spacer{flex:1}
+
+  /* Sidebar */
+  #sidebar{width:0;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;opacity:0;transition:width 0.2s ease,opacity 0.2s ease}
+  #sidebar.open{width:300px;opacity:1}
+  .side-head{padding:12px 14px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;justify-content:space-between}
+  .side-body{flex:1;overflow-y:auto;padding:0 10px 12px}
+  .tree-item{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--fg);white-space:nowrap;transition:background 0.1s ease}
+  .tree-item:hover{background:var(--hover)}
+  .tree-item.active{background:var(--selectBg);color:#fff}
+  .tree-item .name{overflow:hidden;text-overflow:ellipsis}
+  .tree-item .tbtn{background:transparent;opacity:0;margin-left:auto;display:flex;gap:2px}
+  .tree-item:hover .tbtn{opacity:1}
+  .tree-item .tbtn button{background:var(--hover);padding:1px 4px;border-radius:3px;color:var(--dim)}
+  .tree-item .tbtn button:hover{background:var(--hoverBtn);color:var(--fg)}
+  .child{display:none;transition:max-height 0.15s ease}.child.open{display:block}
+
+  /* Editor pane */
+  #editor-pane{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+  #tabs{height:34px;background:var(--sidebar);display:flex;align-items:flex-end;overflow-x:auto;border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+  .tab{display:flex;align-items:center;gap:7px;padding:6px 14px;font-size:13px;color:var(--dim);max-width:190px;min-width:120px;cursor:pointer;border-top:2px solid transparent;user-select:none;flex-shrink:0;transition:background 0.12s ease,color 0.12s ease,border-color 0.12s ease}
+  .tab:hover{background:var(--hover)}
+  .tab.active{background:var(--bg);border-top-color:var(--accent);color:var(--fg)}
+  .tab .tname{overflow:hidden;text-overflow:ellipsis;flex:1}
+  .tab .dirty{width:8px;height:8px;border-radius:50%;background:var(--dim);flex-shrink:0}
+  .tab .close{opacity:0;border-radius:4px;padding:1px;color:var(--muted);flex-shrink:0}
+  .tab:hover .close{opacity:1}
+  .tab .close:hover{background:var(--hoverBtn);color:var(--fg)}
+  #editor{flex:1;min-height:0;position:relative}
+
+  /* Welcome */
+  .welcome{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dim);padding:24px;overflow-y:auto}
+  .welcome h1{font-size:34px;font-weight:300;color:var(--fg);margin:14px 0 6px}
+  .welcome .sub{font-size:14px;margin-bottom:26px}
+  .welcome .actions{display:flex;gap:12px;margin-bottom:26px;flex-wrap:wrap;justify-content:center}
+  .btn{padding:10px 16px;border-radius:6px;background:var(--inputBg);color:var(--fg);font-size:13px;display:inline-flex;align-items:center;gap:8px}
+  .btn:hover{background:var(--hoverStrong)}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.primary:hover{background:#1a8ad8}
+  .btn.danger{background:#3a2230;color:#e6a0b0}
+  .btn.danger:hover{background:#4a2b3a}
+  .btn.sm{padding:6px 10px;font-size:12px;border-radius:5px}
+  .btn.block{width:100%;justify-content:center;margin-top:6px}
+  .welcome .grid{display:grid;grid-template-columns:repeat(2,minmax(210px,1fr));gap:10px;max-width:560px;font-size:13px}
+  .welcome .kbd{background:var(--sidebar);border:1px solid var(--border);padding:10px 12px;border-radius:6px;display:flex;gap:10px;align-items:center}
+  .welcome .k{font-family:ui-monospace,Consolas,monospace;color:var(--accent)}
+  .welcome .foot{margin-top:24px;font-size:11px;color:var(--muted);text-align:center;line-height:1.6}
+
+  /* Terminal */
+  #term-resize{height:5px;background:transparent;flex-shrink:0;cursor:ns-resize;display:none}
+  #term-resize.vis{display:block}
+  #term-resize:hover{background:var(--accent)}
+  #terminal{background:var(--termBg);border-top:1px solid var(--inputBorder);flex-direction:column;flex-shrink:0;height:0;overflow:hidden;opacity:0;transition:height 0.2s ease,opacity 0.15s ease}
+  #terminal.open{opacity:1}
+  #term-head{display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--termHead);font-size:12px;color:var(--fg)}
+  #term-head span.c{flex:1}
+  #term-head .tb{color:var(--dim);padding:1px 5px;border-radius:3px}
+  #term-head .tb:hover{background:var(--hoverStrong);color:var(--fg)}
+  #term-body{flex:1;overflow-y:auto;padding:8px 14px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+  .term-line{padding:1px 0;white-space:pre-wrap;word-break:break-word}
+  .term-input{color:#98c379}.term-error{color:#e06c75}.term-info{color:#61afef}.term-out{color:var(--fg)}
+  .term-cmd{display:flex;align-items:center;color:var(--fg);margin-top:2px}
+  .term-cmd .prompt{color:#98c379;margin-right:8px;white-space:nowrap}
+  .term-cmd input{flex:1;background:transparent;border:none;outline:none;color:var(--fg);font-family:inherit;font-size:13px}
+
+  /* Status bar */
+  #statusbar{height:24px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:12px;flex-shrink:0;user-select:none}
+  #statusbar .grp{display:flex;align-items:center;gap:4px}
+  .sb{display:flex;align-items:center;gap:5px;padding:2px 7px;border-radius:3px;transition:background 0.1s ease}
+  .sb:hover{background:rgba(255,255,255,.16)}
+  .sb{cursor:pointer}
+
+  /* Toasts */
+  #toasts{position:fixed;right:16px;bottom:16px;z-index:5000;display:flex;flex-direction:column;gap:8px}
+  .toast{background:var(--card);border:1px solid var(--inputBorder);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px;color:var(--fg);font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.4);min-width:200px;max-width:360px;animation:tin .2s ease}
+  .toast.error{border-left-color:#e06c75}
+  .toast.success{border-left-color:#98c379}
+  .toast.out{animation:tout 0.25s ease forwards}
+  @keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  @keyframes dropIn{from{transform:translateX(-50%) scaleY(0.96);opacity:0}to{transform:translateX(-50%) scaleY(1);opacity:1}}
+  @keyframes fadeSlideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  @keyframes modalIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes tout{to{transform:translateX(120%);opacity:0}}
+
+  /* Overlays */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding-top:14vh;z-index:4000}
+  .overlay.open{display:flex;animation:fadeIn 0.15s ease}
+  .palette{width:560px;max-width:92vw;background:var(--sidebar);border:1px solid var(--inputBorder);border-radius:8px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.6);animation:fadeSlideIn 0.12s ease}
+  .palette input{width:100%;background:var(--inputBg);border:none;outline:none;color:var(--fg);padding:14px 16px;font-size:15px}
+  .palette-list{max-height:300px;overflow-y:auto;padding:6px}
+  .palette-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;color:var(--fg)}
+  .palette-item:hover,.palette-item.sel{background:var(--selectBg);color:#fff}
+  .palette-item .pk{font-size:11px;color:var(--dim)}
+  .palette-item .pt{color:var(--dim);font-size:11px;margin-left:auto}
+  .modal{background:var(--sidebar);border:1px solid var(--inputBorder);border-radius:8px;padding:20px;width:440px;max-width:92vw;box-shadow:0 12px 40px rgba(0,0,0,.6);animation:modalIn 0.15s ease}
+  .modal h2{font-size:16px;color:var(--fg);margin-bottom:6px}
+  .modal p{font-size:13px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .modal input[type=text]{width:100%;background:var(--inputBg);border:none;outline:none;color:var(--fg);padding:9px 12px;border-radius:6px;margin-bottom:12px}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+  .modal textarea{width:100%;background:var(--bg);border:1px solid var(--inputBorder);outline:none;color:var(--fg);padding:10px;border-radius:6px;font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:120px;resize:vertical;white-space:pre}
+
+  /* Extensions */
+  .dropzone{border:2px dashed var(--cardBorder);border-radius:8px;padding:18px;text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;transition:.15s}
+  .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(0,122,204,.07);color:var(--fg)}
+  .ext-grid{display:flex;flex-direction:column;gap:10px}
+  .ext-card{background:var(--card);border:1px solid var(--cardBorder);border-radius:8px;padding:12px;transition:border-color 0.2s ease,box-shadow 0.2s ease}
+  .ext-card:hover{border-color:var(--dim);box-shadow:0 0 12px rgba(0,122,204,.08)}
+  .ext-top{display:flex;gap:10px;align-items:flex-start}
+  .ext-icon{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#007acc,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .ext-info{flex:1;min-width:0}
+  .ext-name{font-size:14px;color:var(--fg);font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .ext-ver{color:var(--dim);font-weight:400;font-size:11px}
+  .ext-pub{font-size:11px;color:var(--dim);margin-top:1px}
+  .ext-desc{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.4}
+  .ext-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .chip{font-size:10px;background:var(--bg);border:1px solid var(--cardBorder);color:var(--dim);padding:2px 8px;border-radius:11px}
+  .ext-actions{display:flex;gap:8px;margin-top:10px}
+  .sec-title{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin:14px 0 8px}
+  .divider{height:1px;background:var(--border);margin:8px 0}
+  .mark{background:#613214;color:#fff;border-radius:2px;padding:0 1px}
+  .srch-res-line{display:flex;gap:6px;padding:3px 6px;font-size:12px;cursor:pointer;border-radius:4px;color:var(--fg);transition:background 0.1s ease}
+  .srch-res-line:hover{background:var(--selectBg)}
+  .srch-res-line .ln{color:var(--dim);min-width:28px;text-align:right;flex-shrink:0}
+  .srch-res-line code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Consolas,monospace}
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .set-row .lbl{font-size:13px;color:var(--fg)}.set-row .desc{font-size:11px;color:var(--dim);margin-top:2px}
+  .set-row select,.set-row input[type=number]{background:var(--inputBg);color:var(--fg);border:none;outline:none;padding:5px 8px;border-radius:5px}
+  .switch{position:relative;width:36px;height:20px;background:var(--muted);border-radius:10px;transition:background 0.2s ease;flex-shrink:0;cursor:pointer}
+  .switch.on{background:var(--accent)}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:0.2s ease}
+  .switch.on::after{left:18px}
+  .codeblock{background:var(--bg);border:1px solid var(--cardBorder);border-radius:6px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#9aa2fe;white-space:pre-wrap;max-height:200px;overflow:auto}
+  .manifest-card{background:var(--card);border:1px solid var(--cardBorder);border-radius:8px;padding:12px}
+  .manifest-card h4{color:var(--fg);font-size:13px;margin-bottom:6px}
+  #dropmask{position:fixed;inset:0;background:rgba(0,122,204,.12);border:3px dashed var(--accent);z-index:6000;display:none;pointer-events:none}
+  #dropmask .txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;font-weight:600}
+  .icon-btn{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--inputBg);color:var(--fg);font-size:15px}
+  .icon-btn:hover{background:var(--hoverStrong)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TITLE BAR -->
+  <div id="titlebar">
+    <div class="brand"><span class="logo">🚫</span><span>Ban Code</span><span style="color:var(--dim)">—</span><span id="docname">Welcome</span></div>
+    <div id="menubar"></div>
+    <div id="winbtns"><span class="pillow" id="ext-count">🧩 0 ext</span></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="activitybar"></div>
+    <div id="sidebar"><div class="side-head" id="side-head">Explorer</div><div class="side-body" id="side-body"></div></div>
+    <div id="editor-pane">
+      <div id="tabs"></div>
+      <div id="editor"><div class="welcome" id="welcome"></div></div>
+      <div id="term-resize"></div>
+      <div id="terminal">
+        <div id="term-head"><span>⌨</span><span>Terminal</span><span class="c"></span>
+          <span class="tb" id="t-max" title="Maximize">▲</span>
+          <span class="tb" id="t-min" title="Minimize">▼</span>
+          <span class="tb" id="t-close" title="Close">✕</span>
+        </div>
+        <div id="term-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="statusbar"><div class="grp" id="sb-left"></div><div class="grp" id="sb-right"></div></div>
+</div>
+
+<!-- OVERLAYS -->
+<div class="overlay" id="palette-overlay">
+  <div class="palette">
+    <input id="palette-input" placeholder="Type a command or search..." autocomplete="off" spellcheck="false" />
+    <div class="palette-list" id="palette-list"></div>
+  </div>
+</div>
+<div class="overlay" id="modal-overlay"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+<div id="dropmask"><div class="txt">⬇ Drop a .json extension file to install</div></div>
+
+<input type="file" id="install-ext-input" accept=".json,application/json" style="display:none" />
+<input type="file" id="load-project-input" accept=".json,application/json" style="display:none" />
+<input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none" />
+
+<script>
+/* =========================================================================
+   BAN CODE — single-file code editor with a JSON extension system
+   Extensions are plain .json files (VS Code manifest style) that can add:
+   commands, color themes, code snippets, terminal commands & keybindings.
+   ========================================================================= */
+
+/* ---------- helpers ---------- */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+const uid=()=> 'n'+Math.random().toString(36).slice(2,9)+Date.now().toString(36);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MONO="ui-monospace,SFMono-Regular,'JetBrains Mono','Fira Code',Consolas,Monaco,monospace";
+let _toastSeq=0;
+function toast(msg,type='info',ms=2600){
+  const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
+  $('#toasts').appendChild(el);
+  setTimeout(()=>{el.classList.add('out');setTimeout(()=>{if(el.parentNode)el.parentNode.removeChild(el);},260);},ms);
+}
+const LS={ get(k,d){try{const v=localStorage.getItem('ban.'+k);return v==null?d:JSON.parse(v);}catch(e){return d}},
+  set(k,v){try{localStorage.setItem('ban.'+k,JSON.stringify(v));}catch(e){}},
+  del(k){try{localStorage.removeItem('ban.'+k);}catch(e){}} };
+
+/* ---------- global switch helper ---------- */
+function sw(sel,cb){const el=$(sel);if(!el)return;el.onclick=()=>{el.classList.toggle('on');cb(el.classList.contains('on'));};}
+
+/* ---------- languages ---------- */
+const LANG_MAP={js:'javascript',jsx:'javascript',mjs:'javascript',cjs:'javascript',ts:'typescript',tsx:'typescript',mts:'typescript',py:'python',pyw:'python',rb:'ruby',go:'go',rs:'rust',java:'java',c:'c',h:'c',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',cs:'csharp',php:'php',swift:'swift',kt:'kotlin',html:'html',htm:'html',css:'css',scss:'scss',less:'less',sass:'scss',json:'json',jsonc:'json',yaml:'yaml',yml:'yaml',xml:'xml',svg:'xml',md:'markdown',markdown:'markdown',sh:'shell',bash:'shell',zsh:'shell',sql:'sql',ini:'ini',toml:'ini',conf:'ini',txt:'plaintext',vue:'html',svelte:'html',lua:'lua',r:'r',dart:'dart',fs:'fsharp',pl:'perl'};
+function langFromName(name){const e=name.includes('.')?name.split('.').pop().toLowerCase():'';return LANG_MAP[e]||'plaintext';}
+function fileIcon(name){const e=name.split('.').pop().toLowerCase();const m={js:'🟨',jsx:'🟨',ts:'🟦',tsx:'🟦',py:'🐍',json:'🧾',html:'🟧',css:'🎨',scss:'🎨',md:'📄',java:'☕',go:'🐹',rs:'🦀',c:'🔵',cpp:'➕',csharp:'💠',php:'🐘',sh:'🐚',sql:'🗄️',yaml:'⚙️',xml:'🧩',svg:'🖼️',txt:'📃',lock:'🔒',png:'🖼️',jpg:'🖼️',gif:'🖼️',webp:'🖼️',pdf:'📕',zip:'🗜️'};return m[e]||'📄';}
+
+/* ---------- state ---------- */
+const state={
+  fileList:[], openFiles:[], activeFileId:null,
+  activityView:'explorer', sidebarVisible:true,
+  terminalVisible:false,
+  searchQuery:'',
+  extensions:[],
+  projectJson:null, projectDirty:false,
+  settings:LS.get('settings',{ theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false }),
+  monaco:null, monacoReady:false, editor:null,
+  paletteMode:'cmd', paletteItems:[], paletteSel:0,
+};
+function persist(){LS.set('settings',state.settings);LS.set('extensions',state.extensions);}
+const persistSettings=()=>LS.set('settings',state.settings);
+
+let _termHeight=210; // remember terminal height across toggles
+
+/* ---------- file system ---------- */
+function findNode(nodes,id){for(const n of nodes){if(n.id===id)return n;if(n.children){const r=findNode(n.children,id);if(r)return r;}}return null;}
+function removeNode(nodes,id){const o=[];for(const n of nodes){if(n.id===id)continue;if(n.children)n.children=removeNode(n.children,id);o.push(n);}return o;}
+function defaultContent(name){const l=langFromName(name);
+  if(l==='html')return '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>'+name+'</title>\n</head>\n<body>\n  \n</body>\n</html>';
+  if(l==='css')return '/* '+name+' */\n\n';
+  if(l==='json')return '{\n  \n}';
+  if(l==='markdown')return '# '+name.replace(/\.md$/,'')+'\n\n';
+  if(l==='javascript'||l==='typescript')return '// '+name+'\n\n';
+  if(l==='python')return '#'+name+'\n\n';
+  return '';}
+function makeNode(name,type,parentPath){const id=uid();const node={id,name,type};if(type==='folder'){node.children=[];node.isOpen=true;}else{node.language=langFromName(name);node.content='';node.path=(parentPath?parentPath+'/':'')+name;}return node;}
+function createFile(name,content,language,parentId){
+  if(!state.fileList.length)return toast('Open a project first','info');
+  const parent=parentId?findNode(state.fileList,parentId):state.fileList[0];
+  const node={id:uid(),name,type:'file',language:language||langFromName(name),content:content||defaultContent(name),path:(parent&&parent.type==='folder'?(parent.path?(parent.path+'/'):''):'')+name};
+  if(parent&&parent.type==='folder')parent.children.push(node);else state.fileList.push(node);
+  state.projectDirty=true;openNode(node);renderExplorer();renderStatusbar();return node;}
+function createFolder(name,parentId){
+  if(!state.fileList.length)return toast('Open a project first','info');
+  const parent=parentId?findNode(state.fileList,parentId):state.fileList[0];
+  const node={id:uid(),name,type:'folder',isOpen:true,children:[],path:(parent&&parent.type==='folder'?(parent.path?(parent.path+'/'):''):'')+name};
+  if(parent&&parent.type==='folder')parent.children.push(node);else state.fileList.push(node);
+  state.projectDirty=true;renderExplorer();renderStatusbar();return node;}
+function openNode(node){
+  if(node.type!=='file')return;
+  let of=state.openFiles.find(f=>f.id===node.id);
+  if(!of){of={id:node.id,name:node.name,content:node.content||'',language:node.language||'plaintext',path:node.path||node.name,modified:false};state.openFiles.push(of);}
+  state.activeFileId=node.id;
+  renderTabs();renderEditor();renderStatusbar();setDocName(node.name);}
+function closeFile(id){
+  const idx=state.openFiles.findIndex(f=>f.id===id);
+  state.openFiles=state.openFiles.filter(f=>f.id!==id);
+  if(state.activeFileId===id){const a=state.openFiles;state.activeFileId=a.length?a[Math.min(idx,a.length-1)].id:null;}
+  renderTabs();renderEditor();renderStatusbar();
+  setDocName(state.openFiles.find(f=>f.id===state.activeFileId)?.name||'Welcome');}
+function updateDocContent(id,content){
+  const f=state.openFiles.find(x=>x.id===id);if(!f)return;
+  f.content=content;f.modified=true;state.projectDirty=true;renderTabs();renderStatusbar();
+  // sync into project tree
+  const node=findNode(state.fileList,id);
+  if(node)node.content=content;
+}
+function currentOpen(){return state.openFiles.find(f=>f.id===state.activeFileId)||null;}
+function setDocName(n){$('#docname').textContent=n||'Welcome';}
+
+/* ---------- welcome ---------- */
+function renderWelcome(){
+  const w=$('#welcome');if(!w)return;
+  w.innerHTML='<div style="font-size:60px">🚫</div>'
+    +'<h1>Welcome to Ban Code</h1><div class="sub">A lightweight, extension-powered code editor</div>'
+    +'<div class="actions">'
+    +'<button class="btn primary" onclick="ui.newProject()">🆕 New Project</button>'
+    +'<button class="btn" onclick="ui.loadProjectJson()">📂 Open JSON</button>'
+    +'<button class="btn" onclick="ui.importFolder()">📦 Import Folder</button>'
+    +'<button class="btn" onclick="ui.installExtension()">🧩 Install Extension</button>'
+    +'</div>'
+    +'<div class="grid">'
+    +'<div class="kbd"><span>💾</span><div><span class="k">Ctrl+S</span><div class="muted">Save file</div></div></div>'
+    +'<div class="kbd"><span>🧩</span><div><span class="k">Ctrl+Shift+P</span><div class="muted">Command Palette</div></div></div>'
+    +'<div class="kbd"><span>⚡</span><div><span class="k">Ctrl+`</span><div class="muted">Toggle Terminal</div></div></div>'
+    +'<div class="kbd"><span>🆕</span><div><span class="k">Ctrl+N</span><div class="muted">New Project</div></div></div>'
+    +'<div class="kbd"><span>🔍</span><div><span class="k">Ctrl+Shift+F</span><div class="muted">Search</div></div></div>'
+    +'<div class="kbd"><span>📜</span><div><span class="k">Ctrl+P</span><div class="muted">Quick Open</div></div></div>'
+    +'</div>'
+    +'<div class="foot">Built with Monaco Editor · Extensions are plain .json files you drop in 🧩<br>'
+    +'Installed extensions: <b id="wfec">0</b></div>';
+  const wf=$('#wfec');if(wf)wf.textContent=state.extensions.length;
+}
+
+/* ---------- tabs ---------- */
+function renderTabs(){
+  const t=$('#tabs');if(!t)return;
+  if(!state.openFiles.length){t.innerHTML='<div style="padding:8px 14px;font-size:12px;color:var(--dim)">No files open</div>';return;}
+  t.innerHTML=state.openFiles.map(f=>{
+    const act=f.id===state.activeFileId;
+    return '<div class="tab '+(act?'active':'')+'" data-id="'+f.id+'"><span>'+fileIcon(f.name)+'</span>'
+      +'<span class="tname">'+esc(f.name)+'</span>'
+      +(f.modified?'<span class="dirty"></span>':'')
+      +'<span class="close" data-close="'+f.id+'">✕</span></div>';
+  }).join('');
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest('[data-close]');
+  if(c){e.stopPropagation();closeFile(c.getAttribute('data-close'));return;}
+  const tab=e.target.closest('.tab');
+  if(tab&&!e.target.closest('.close')){state.activeFileId=tab.getAttribute('data-id');renderTabs();renderEditor();renderStatusbar();}
+});
+
+/* ---------- explorer ---------- */
+function renderExplorer(){
+  const body=$('#side-body');if(!body||state.activityView!=='explorer')return;
+  body.innerHTML='<div class="sec-title">WORKSPACE</div>'
+    +'<div id="tree"></div>'
+    +'<div class="divider"></div>'
+    +(state.fileList.length
+      ?'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        +'<button class="btn sm" onclick="ui.newFile()">＋ File</button>'
+        +'<button class="btn sm" onclick="ui.newFolder()">＋ Folder</button>'
+        +'<button class="btn sm" onclick="toggleAll(true)">⊞ All</button>'
+        +'</div>'
+      :'<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="ui.newProject()">🆕 New</button><button class="btn sm" onclick="ui.loadProjectJson()">📂 Open</button></div>')
+    +'<button class="btn sm block" onclick="ui.saveProject()">💾 Download JSON</button>'
+    +'<button class="btn sm block" onclick="ui.exportZip()">📦 Export as ZIP</button>';
+  const tree=$('#tree');
+  if(!state.fileList.length){tree.innerHTML='<div class="muted" style="padding:12px;text-align:center;font-size:12px">Empty workspace.<br>Create or open a project.</div>';return;}
+  tree.appendChild(renderNodes(state.fileList,0));
+}
+function renderNodes(nodes,depth){
+  const w=document.createElement('div');
+  nodes.forEach(n=>{
+    const row=document.createElement('div');row.className='tree-item';
+    if(n.type==='folder'){
+      row.innerHTML='<span>'+(n.isOpen?'📂':'📁')+'</span><span class="name">'+esc(n.name)+'</span>'
+        +'<span class="tbtn"><button data-nf="'+n.id+'" title="New file">＋</button><button data-nd="'+n.id+'" title="New folder">📁</button><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
+      row.style.paddingLeft=(8+depth*16)+'px';
+      row.onclick=e=>{if(e.target.closest('.tbtn'))return;n.isOpen=!n.isOpen;renderExplorer();};
+      const ch=document.createElement('div');ch.className='child'+(n.isOpen?' open':'');
+      ch.appendChild(renderNodes(n.children||[],depth+1));
+      w.appendChild(row);w.appendChild(ch);
+    }else{
+      const active=n.id===state.activeFileId;
+      row.className+=(active?' active':'');
+      row.innerHTML='<span>'+fileIcon(n.name)+'</span><span class="name">'+esc(n.name)+'</span>'
+        +'<span class="tbtn"><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
+      row.style.paddingLeft=(8+depth*16)+'px';
+      row.onclick=()=>openNode(n);
+      w.appendChild(row);
+    }
+  });
+  $$('.tbtn [data-nf]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();ui.newFileAt(b.getAttribute('data-nf'));});
+  $$('.tbtn [data-nd]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();ui.newFolderAt(b.getAttribute('data-nd'));});
+  $$('.tbtn [data-rm]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.getAttribute('data-rm');if(confirm('Delete this item?')){state.fileList=removeNode(state.fileList,id);closeFile(id);state.projectDirty=true;renderExplorer();renderStatusbar();}});
+  return w;
+}
+function toggleAll(open){const w=n=>n.forEach(x=>{if(x.children){x.isOpen=open;w(x.children);}});w(state.fileList);renderExplorer();}
+
+/* ---------- Monaco ---------- */
+function initMonaco(){
+  require.config({paths:{vs:'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs'}});
+  require(['vs/editor/editor.main'],()=>{
+    state.monaco=monaco;state.monacoReady=true;
+    defineBaseThemes();
+    state.extensions.forEach(x=>defineExtensionThemes(x.contributes&&x.contributes.themes));
+    applyTheme(state.settings.theme);
+    setupCompletion();
+    renderEditor();
+    toast('Editor ready','success',1800);
+  });
+}
+function defineBaseThemes(){
+  monaco.editor.defineTheme('ban-dark',{base:'vs-dark',inherit:true,rules:[],colors:{'editor.background':'#1e1e1e','editor.foreground':'#cccccc','editor.lineHighlightBackground':'#2a2d2e'}});
+  monaco.editor.defineTheme('ban-light',{base:'vs',inherit:true,rules:[],colors:{'editor.background':'#ffffff','editor.foreground':'#000000'}});
+  monaco.editor.defineTheme('ban-hc',{base:'hc-black',inherit:true,rules:[],colors:{'editor.background':'#000000'}});
+}
+function renderEditor(){
+  const host=$('#editor');if(!host)return;
+  const file=currentOpen();
+  if(!state.monacoReady){return;}
+  if(!file){
+    if(state.editor){state.editor.dispose();state.editor=null;}
+    host.innerHTML='<div class="welcome" id="welcome"></div>';
+    renderWelcome();return;
+  }
+  if(!state.editor){
+    host.innerHTML='';
+    state.editor=monaco.editor.create(host,{value:'',language:file.language,theme:'ban-dark',automaticLayout:true,fontFamily:MONO,fontLigatures:true,padding:{top:14,bottom:14}});
+    state.editor.onDidChangeModelContent(()=>{const cur=currentOpen();if(cur)updateDocContent(cur.id,state.editor.getValue());});
+    state.editor.onDidChangeCursorPosition(()=>renderStatusbar());
+  }
+  applyEditorSettings();
+  const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(file.path||file.name));
+  let m=monaco.editor.getModel(uri);
+  if(!m){m=monaco.editor.createModel(file.content||'',file.language,uri);}
+  else {monaco.editor.setModelLanguage(m,file.language);}
+  state.editor.setModel(m);
+}
+function applyEditorSettings(){
+  if(!state.editor)return;
+  state.editor.updateOptions({fontSize:state.settings.fontSize,tabSize:state.settings.tabSize,
+    wordWrap:state.settings.wordWrap?'on':'off',minimap:{enabled:state.settings.minimap},
+    lineNumbers:state.settings.lineNumbers?'on':'off',
+    bracketPairColorization:{enabled:state.settings.bracketPairColorization},
+    cursorBlinking:state.settings.cursorBlinking,fontFamily:MONO,fontLigatures:true,smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:'selection'});
+}
+function applyTheme(id){
+  if(!id)return;
+  if(id==='light')id='ban-light';if(id==='dark')id='ban-dark';
+  // Update CSS variables for page chrome
+  const isLight=(id==='ban-light');
+  const isHC=(id==='ban-hc');
+  const r=document.documentElement.style;
+  if(isLight){
+    r.setProperty('--bg','#ffffff');r.setProperty('--sidebar','#f3f3f3');r.setProperty('--activity','#e8e8e8');
+    r.setProperty('--border','#e0e0e0');r.setProperty('--titlebar','#e8e8ec');r.setProperty('--accent','#007acc');
+    r.setProperty('--fg','#1e1e1e');r.setProperty('--dim','#6e6e6e');r.setProperty('--muted','#999999');
+    r.setProperty('--hover','rgba(0,0,0,.06)');r.setProperty('--hoverStrong','rgba(0,0,0,.10)');r.setProperty('--hoverBtn','rgba(0,0,0,.14)');
+    r.setProperty('--card','#f6f6f6');r.setProperty('--cardBorder','#d8d8d8');r.setProperty('--inputBg','#e8e8e8');r.setProperty('--inputBorder','#c8c8c8');
+    r.setProperty('--selectBg','#094771');r.setProperty('--scrollbar','#c1c1c1');r.setProperty('--scrollbarHover','#a8a8a8');
+    r.setProperty('--termBg','#f0f0f0');r.setProperty('--termHead','#e0e0e0');
+  } else if(isHC){
+    r.setProperty('--bg','#000000');r.setProperty('--sidebar','#000000');r.setProperty('--activity','#000000');
+    r.setProperty('--border','#6fc3df');r.setProperty('--titlebar','#000000');r.setProperty('--accent','#4fc1ff');
+    r.setProperty('--fg','#ffffff');r.setProperty('--dim','#a9a9a9');r.setProperty('--muted','#888888');
+  } else {
+    r.setProperty('--bg','#1e1e1e');r.setProperty('--sidebar','#252526');r.setProperty('--activity','#333333');
+    r.setProperty('--border','#2a2a2a');r.setProperty('--titlebar','#252333');r.setProperty('--accent','#007acc');
+    r.setProperty('--fg','#cccccc');r.setProperty('--dim','#858585');r.setProperty('--muted','#6b6b6b');
+  }
+  // Apply Monaco theme
+  if(state.monacoReady){monaco.editor.setTheme(_themes[id]?id:(id==='ban-light'?'ban-light':id==='ban-hc'?'ban-hc':'ban-dark'));}
+  state.settings.theme=id;
+}
+function setupCompletion(){
+  monaco.languages.registerCompletionItemProvider('*',{
+    provideCompletionItems(model,position){
+      const lang=model.getLanguageId();const sn=_snippets[lang]||[];
+      const range={startLineNumber:position.lineNumber,startColumn:position.column,endLineNumber:position.lineNumber,endColumn:position.column};
+      return {suggestions:sn.map(s=>({label:s.prefix,kind:monaco.languages.CompletionItemKind.Snippet,insertText:s.body.join('\n'),detail:s.description||s.label,documentation:{value:s.body.join('\n')},insertTextRules:monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,range}))};
+    }
+  });
+}
+function insertAtCursor(text){
+  const f=currentOpen();if(!f)return toast('Open a file first','info');
+  if(state.editor){const p=state.editor.getPosition();state.editor.executeEdits('extension',[{range:new monaco.Range(p.lineNumber,p.column,p.lineNumber,p.column),text:text}]);state.editor.focus();}
+}
+
+/* ---------- status bar ---------- */
+function renderStatusbar(){
+  const f=currentOpen();
+  const projName=state.fileList.length?esc(state.fileList[0].name):'';
+  $('#sb-left').innerHTML=(projName?'<span class="sb">'+projName+'</span>':'<span class="sb">No project</span>')+'<span class="sb" onclick="toggleTerminal()">⎇ main</span><span class="sb" onclick="toggleTerminal()">⧉ 0↓ 0↑</span><span class="sb" onclick="toggleTerminal()">⚑ 0</span>';
+  let r=f?'<span class="sb">Ln '+countLines(f.content)+'</span><span class="sb">Spaces: '+state.settings.tabSize+'</span><span class="sb">UTF-8</span><span class="sb" style="text-transform:uppercase">'+esc(f.language)+'</span>': '<span class="sb">Ready</span>';
+  if(f&&f.modified)r+='<span class="sb">[Modified]</span>';
+  r+='<span class="sb" onclick="toggleTerminal()">⌨</span><span class="sb" id="sbver">Ban Code v2.0</span>';
+  $('#sb-right').innerHTML=r;
+}
+function countLines(c){return c?c.split('\n').length:1;}
+
+/* ---------- terminal ---------- */
+const termState={lines:[],hist:[],hi:-1};
+function termWrite(text,cls){termState.lines.push({t:text,c:cls||'term-out'});renderTerm();}
+const termLine=termWrite;
+const termLines=termWrite;
+function renderTerm(){
+  const b=$('#term-body');if(!b)return;
+  b.innerHTML=termState.lines.map(l=>'<div class="term-line '+l.c+'">'+esc(l.t)+'</div>').join('')
+    +'<div class="term-cmd"><span class="prompt">➜ ban ~ $</span><input id="term-in" autocomplete="off" spellcheck="false"></div>';
+  const inp=$('#term-in');if(inp){inp.focus();inp.addEventListener('keydown',termKey);}
+  b.scrollTop=b.scrollHeight;
+}
+function termKey(e){
+  const inp=$('#term-in');if(!inp)return;
+  if(e.key==='Enter'){const c=inp.value;inp.value='';termState.hist.push(c);termState.hi=-1;termLine(c,'term-input');runCommand(c);}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(termState.hist.length){termState.hi=Math.min(termState.hi+1,termState.hist.length-1);inp.value=termState.hist[termState.hist.length-1-termState.hi];}}
+  else if(e.key==='ArrowDown'){e.preventDefault();termState.hi=Math.max(termState.hi-1,-1);inp.value=termState.hi<0?'':termState.hist[termState.hist.length-1-termState.hi];}
+  else if(e.key==='Tab'){e.preventDefault();const cmds=termCommands();const m=cmds.find(c=>c.startsWith(inp.value.toLowerCase()));if(m)inp.value=m;}
+}
+function termCommands(){const b=['help','clear','echo','date','ls','pwd','whoami','version','list-ext','theme'];state.extensions.forEach(x=>Object.keys(x.contributes&&x.contributes.terminalCommands||{}).forEach(c=>b.push(c)));return b;}
+function runCommand(raw){
+  const cmd=raw.trim(),low=cmd.toLowerCase();
+  if(!cmd)return;
+  switch(low){
+    case 'help':termLine('Available commands:','term-info');['help  - help','clear - clear','echo  - echo text','date  - date','ls - list workspace','pwd - cwd','whoami - user','list-ext / extensions - installed','theme - list themes'].forEach(c=>termLines('  '+c));break;
+    case 'clear':termState.lines=[];renderTerm();break;
+    case 'date':termLines(new Date().toString());break;
+    case 'pwd':termLines('/home/'+(state.fileList[0]&&state.fileList[0].name||'workspace'));break;
+    case 'whoami':termLines('developer');break;
+    case 'ls':{const names=state.fileList.flatMap(n=>n.type==='folder'?(n.children||[]).map(c=>c.name+(c.type==='folder'?'/':'')):[n.name]);termLines(names.length?names.join('  '):'(empty workspace)');break;}
+    case 'list-ext':case 'extensions':state.extensions.length?state.extensions.forEach(x=>termLines('  • '+x.name+' v'+x.version+' — '+x.publisher,'term-info')):termLines('No extensions installed.','term-info');break;
+    case 'theme':termLines('Themes:','term-info');Object.keys(_themes).forEach(t=>termLines('  '+t));break;
+    default:{
+      if(low.startsWith('echo ')){termLines(cmd.slice(5));break;}
+      if(low==='exit'){toggleTerminal();break;}
+      let h=false;state.extensions.forEach(x=>{const map=(x.contributes&&x.contributes.terminalCommands)||{};if(map[low]!==undefined){termLines(String(map[low]));h=true;}});
+      if(h)break;
+      termLines('Command not found: '+cmd+' — type "help".','term-error');
+    }
+  }
+}
+function toggleTerminal(){
+  state.terminalVisible=!state.terminalVisible;
+  const term=$('#terminal');
+  const resize=$('#term-resize');
+  if(state.terminalVisible){
+    term.classList.add('open');
+    term.style.height=_termHeight+'px';
+    resize.classList.add('vis');
+    renderTerm();
+  }else{
+    _termHeight=parseInt(term.style.height)||210;
+    term.style.height='0px';
+    resize.classList.remove('vis');
+    setTimeout(()=>{term.classList.remove('open');},220);
+  }
+}
+$('#t-close').onclick=toggleTerminal;
+$('#t-max').onclick=()=>{const h=Math.round(window.innerHeight*0.55);$('#terminal').style.height=h+'px';_termHeight=h;};
+$('#t-min').onclick=()=>{$('#terminal').style.height='150px';_termHeight=150;};
+(function(){let drag=null;
+  $('#term-resize').addEventListener('mousedown',e=>drag={y:e.clientY,h:$('#terminal').offsetHeight||210});
+  document.addEventListener('mousemove',e=>{if(drag){const h=Math.max(100,Math.min(600,drag.h+(drag.y-e.clientY)));$('#terminal').style.height=h+'px';_termHeight=h;}});
+  document.addEventListener('mouseup',()=>drag=null);})();
+
+/* ---------- activity bar ---------- */
+const ACTIVITIES=[{id:'explorer',icon:'🗂',label:'Explorer'},{id:'search',icon:'🔍',label:'Search'},{id:'extensions',icon:'🧩',label:'Extensions'},{id:'settings',icon:'⚙️',label:'Settings'}];
+function renderActivityBar(){
+  $('#activitybar').innerHTML=ACTIVITIES.map(a=>'<div class="ab-wrap"><button class="act '+(state.activityView===a.id?'active':'')+'" data-a="'+a.id+'">'+a.icon+'</button><span class="act-tip">'+a.label+'</span></div>').join('')
+    +'<div class="spacer"></div><div class="ab-wrap"><button class="act" data-a="toggle">◧</button><span class="act-tip">Toggle Sidebar</span></div>';
+  $$('#activitybar .act').forEach(b=>b.onclick=()=>{
+    const a=b.getAttribute('data-a');
+    if(a==='toggle'){state.sidebarVisible=!state.sidebarVisible;renderSidebar();return;}
+    state.activityView=a;if(!state.sidebarVisible)state.sidebarVisible=true;
+    renderActivityBar();renderSidebar();
+  });
+}
+function renderSidebar(){
+  $('#sidebar').classList.toggle('open',state.sidebarVisible);
+  if(!state.sidebarVisible)return;
+  const head=$('#side-head'),body=$('#side-body');
+  if(!body)return;
+  switch(state.activityView){
+    case 'explorer':head.textContent='Explorer';renderExplorer();break;
+    case 'search':head.textContent='Search';renderSearch(body);break;
+    case 'extensions':head.textContent='Extensions';renderExtensions(body);break;
+    case 'settings':head.textContent='Settings';renderSettings(body);break;
+  }
+}
+
+/* ---------- search ---------- */
+function doSearch(q){const out=[];const walk=n=>{n.forEach(x=>{if(x.type==='file'&&x.content){x.content.split('\n').forEach((line,i)=>{if(line.toLowerCase().includes(q.toLowerCase()))out.push({fileId:x.id,line:i+1,content:line.trim()});});}if(x.children)walk(x.children);});};walk(state.fileList);return out;}
+function escRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function mark(text,q){if(!q.trim())return esc(text);return esc(text).replace(new RegExp('('+escRegex(q)+')','gi'),'<mark class="mark">$1</mark>');}
+function renderSearch(body){
+  body.innerHTML='<input id="srch-in" placeholder="🔍 Search" style="width:100%;background:var(--inputBg);border:none;outline:none;color:var(--fg);padding:9px 12px;border-radius:6px;margin-bottom:8px"><div class="muted" style="font-size:12px;padding:0 2px 8px;min-height:14px" id="srch-count"></div><div id="srch-res"></div>';
+  const inp=$('#srch-in');inp.focus();
+  const run=()=>{const q=inp.value.trim();const res=q?doSearch(q):[];$('#srch-count').textContent=q?(res.length+' results in '+new Set(res.map(r=>r.fileId)).size+' files'):'';const box=$('#srch-res');if(!q){box.innerHTML='';return;}if(!res.length){box.innerHTML='<div class="muted" style="text-align:center;padding:20px">No results</div>';return;}
+    const by={};res.forEach(r=>{(by[r.fileId]=by[r.fileId]||[]).push(r);});
+    box.innerHTML=Object.entries(by).map(([id,rs])=>{const node=findNode(state.fileList,id);const nm=node?node.name:'?';
+      return '<div style="margin-bottom:4px"><div style="padding:3px 6px;color:var(--fg);font-size:12px">'+fileIcon(nm)+' '+esc(nm)+' <span class="pillow">'+rs.length+'</span></div>'
+        +rs.map(r=>'<div class="srch-res-line" data-go="'+id+'"><span class="ln">:'+r.line+'</span><code>'+mark(r.content,q)+'</code></div>').join('')+'</div>';}).join('');
+    $$('#srch-res [data-go]').forEach(el=>el.onclick=()=>{const n=findNode(state.fileList,el.getAttribute('data-go'));if(n)openNode(n);});
+  };
+  inp.addEventListener('input',run);run();
+}
+
+/* ---------- themes ---------- */
+const _themes={}; // extension-contributed themes (id -> manifest)
+function defineExtensionThemes(list){(list||[]).forEach(t=>{_themes[t.id]=t;monaco.editor.defineTheme(t.id,{base:t.base||'vs-dark',inherit:true,rules:t.rules||[],colors:Object.assign({'editor.background':'#1e1e1e','editor.foreground':'#cccccc'},t.colors||{})});});}
+function themeList(){const list=[{id:'ban-dark',label:'Ban Dark'},{id:'ban-light',label:'Ban Light'},{id:'ban-hc',label:'Ban High Contrast'}];Object.keys(_themes).forEach(id=>list.push({id,label:_themes[id].label||id}));return list;}
+
+/* ---------- snippets ---------- */
+let _snippets={};
+function registerExtensionSnippets(ext){const sn=ext.contributes&&ext.contributes.snippets||{};Object.entries(sn).forEach(([lang,arr])=>{arr=Array.isArray(arr)?arr:[];arr.forEach(s=>{(_snippets[lang]=_snippets[lang]||[]).push({label:s.label||s.prefix,prefix:s.prefix,body:Array.isArray(s.body)?s.body:[String(s.body)],description:s.description||''});});});}
+function rebuildSnippets(){_snippets={};state.extensions.forEach(registerExtensionSnippets);}
+
+/* ---------- command registry ---------- */
+const _extCommands=[]; // {id,title,type,icon,action,arg}
+const _extKeybinds=[]; // {combo, handler}
+function installCommands(ext){const cmds=ext.contributes&&ext.contributes.commands||[];cmds.forEach(c=>_extCommands.push({id:c.id||uid(),title:c.title||c.id,type:c.action||'toast',icon:c.icon||'🧩',arg:c.arg,extension:ext.name}));}
+function installKeybindings(ext){const kb=ext.contributes&&ext.contributes.keybindings||[];kb.forEach(k=>_extKeybinds.push({key:normKey(k.key),handler:()=>runExtCommandById(k.command),label:k.title||k.command}));}
+function normKey(s){return (s||'').toLowerCase().replace(/[\s-]+/g,'+').replace(/control/g,'ctrl').split('+').map(x=>x.trim()).filter(Boolean).join('+');}
+function runExtCommandById(id){const c=_extCommands.find(x=>x.id===id)||_extCommands.find(x=>x.title===id);if(c)runExtCommand(c);}
+function runExtCommand(c){switch(c.type){
+  case 'alert':alert(c.arg||c.title);break;
+  case 'toast':case 'message':toast(c.arg||c.title,'info');break;
+  case 'terminal':termLines(c.arg||c.title,'term-info');if(!state.terminalVisible)toggleTerminal();break;
+  case 'insert':insertAtCursor(c.arg||'');break;
+  case 'open':{const n=findNode(state.fileList,c.arg)?findNode(state.fileList,c.arg):state.fileList.flatMap(g=>g.type==='folder'?(g.children||[]):[g]).find(f=>f.name===c.arg);if(n)openNode(n);else toast('File not found: '+c.arg,'error');break;}
+  default:toast(c.title+' — '+(c.arg||''),'info');
+  }
+}
+
+function rebuildKeybindings(){_extKeybinds.length=0;state.extensions.forEach(installKeybindings);}
+function rebuildCommands(){_extCommands.length=0;state.extensions.forEach(installCommands);}
+const rebuildMenus=buildMenus;
+const rebuildPalette=()=>{};
+
+/* ---------- extensions ---------- */
+const EXT_MANIFEST_TEMPLATE=`{
+  "id": "my.extension",
+  "name": "My Extension",
+  "version": "1.0.0",
+  "publisher": "you",
+  "description": "What it does",
+  "icon": "🧩",
+  "contributes": {
+    "commands": [
+      { "id": "myext.hello", "title": "Say Hello", "action": "toast", "arg": "Hello from my extension!" }
+    ],
+    "themes": [
+      { "id": "myext.synth", "label": "Synthwave", "base": "vs-dark",
+        "colors": { "editor.background": "#241b2f", "editor.foreground": "#e6e6e6" },
+        "rules": [ { "token": "comment", "foreground": "#6a5c84", "fontStyle": "italic" } ] }
+    ],
+    "snippets": {
+      "javascript": [
+        { "label": "log", "prefix": "log", "body": ["console.log(\${1:value});", "$2"], "description": "console.log snippet" }
+      ]
+    },
+    "terminalCommands": { "hello": "Hello from the terminal!", "magic": "✨" },
+    "keybindings": [ { "key": "Ctrl+Alt+H", "command": "myext.hello", "title": "Say Hello" } ]
+  }
+}`;
+function renderExtensions(body){
+  body.innerHTML='<div class="dropzone" id="ext-drop">🧩 <b>Install from JSON</b><br><span class="muted">Click to pick a .json extension, or drop one anywhere</span></div>'
+    +'<button class="btn primary sm block" id="ext-install">📂 Choose extension .json</button>'
+    +'<div class="divider"></div>'
+    +'<div class="sec-title">Installed ('+state.extensions.length+')</div>'
+    +'<div class="ext-grid" id="ext-installed"></div>'
+    +'<div class="divider"></div>'
+    +'<div class="sec-title">Manifest reference</div>'
+    +'<div class="codeblock" id="ext-manifest"></div>';
+  $('#ext-install').onclick=()=>$('#install-ext-input').click();
+  const dz=$('#ext-drop');dz.onclick=()=>$('#install-ext-input').click();
+  const list=$('#ext-installed');
+  if(!state.extensions.length)list.innerHTML='<div class="muted" style="text-align:center;padding:18px;font-size:12px">Nothing installed yet.<br>Install a .json extension to add commands, themes, snippets & more.</div>';
+  else list.innerHTML=state.extensions.map(extCard).join('');
+  $('#ext-manifest').textContent=EXT_MANIFEST_TEMPLATE;
+  $$('#ext-installed .ext-uninstall').forEach(b=>b.onclick=()=>uninstallExtension(b.getAttribute('data-id')));
+  $$('#ext-installed [data-edit]').forEach(b=>b.onclick=()=>viewExtension(b.getAttribute('data-edit')));
+  updateExtCount();
+}
+function extCard(x){
+  const c=x.contributes||{};const chips=[];
+  if(c.commands&&c.commands.length)chips.push('<span class="chip">⌘ '+c.commands.length+' cmd</span>');
+  if(c.themes&&c.themes.length)chips.push('<span class="chip">🎨 '+c.themes.length+' theme</span>');
+  if(c.snippets&&Object.keys(c.snippets).length)chips.push('<span class="chip">✂ '+Object.values(c.snippets).reduce((a,b)=>a+b.length,0)+' snippets</span>');
+  if(c.terminalCommands&&Object.keys(c.terminalCommands).length)chips.push('<span class="chip">⌨ '+Object.keys(c.terminalCommands).length+' term</span>');
+  if(c.keybindings&&c.keybindings.length)chips.push('<span class="chip">🔧 '+c.keybindings.length+' kbd</span>');
+  if(!chips.length)chips.push('<span class="chip">contributes: -</span>');
+  return '<div class="ext-card"><div class="ext-top"><div class="ext-icon">'+esc(x.icon||'🧩')+'</div><div class="ext-info">'
+    +'<div class="ext-name">'+esc(x.name)+' <span class="ext-ver">v'+esc(x.version||'1.0.0')+'</span></div>'
+    +'<div class="ext-pub">'+esc(x.publisher||'unknown')+'</div>'
+    +'<div class="ext-desc">'+esc(x.description||'No description')+'</div></div></div>'
+    +'<div class="ext-badges">'+chips.join('')+'</div>'
+    +'<div class="ext-actions"><button class="btn sm" data-edit="'+x.id+'">👁 View</button><button class="btn sm danger ext-uninstall" data-id="'+x.id+'">🗑 Uninstall</button></div></div>';
+}
+function updateExtCount(){$('#ext-count').textContent='🧩 '+state.extensions.length+' ext';const w=$('#wfec');if(w)w.textContent=state.extensions.length;}
+function validateManifest(m){
+  if(!m||typeof m!=='object'||Array.isArray(m))return 'must be a JSON object';
+  if(!m.id||typeof m.id!=='string')return 'missing string "id"';
+  if(!m.name||typeof m.name!=='string')return 'missing string "name"';
+  const c=m.contributes||{};
+  if(c.commands&&!Array.isArray(c.commands))return '"commands" must be an array';
+  if(c.themes&&!Array.isArray(c.themes))return '"themes" must be an array';
+  if(c.snippets&&(typeof c.snippets!=='object'))return '"snippets" must be an object';
+  if(c.terminalCommands&&(typeof c.terminalCommands!=='object'))return '"terminalCommands" must be an object';
+  if(c.keybindings&&!Array.isArray(c.keybindings))return '"keybindings" must be an array';
+  return null;
+}
+function installExtension(manifest,source){
+  const err=validateManifest(manifest);
+  if(err)return toast('Invalid extension: '+err,'error',5200);
+  if(state.extensions.find(x=>x.id===manifest.id))return toast('Extension "'+manifest.id+'" already installed. Uninstall first.','error');
+  manifest.source=source;
+  state.extensions.push(manifest);
+  persist();
+  if(state.monacoReady&&manifest.contributes&&manifest.contributes.themes)defineExtensionThemes(manifest.contributes.themes);
+  registerExtensionSnippets(manifest);
+  installKeybindings(manifest);
+  installCommands(manifest);
+  rebuildMenus();
+  renderAll();
+  toast('Installed "'+manifest.name+'" 🧩','success');
+  openExtensionsPanel();
+}
+function uninstallExtension(id){
+  const x=state.extensions.find(e=>e.id===id);if(!x)return;
+  state.extensions=state.extensions.filter(e=>e.id!==id);persist();
+  (x.contributes&&x.contributes.themes||[]).forEach(t=>{delete _themes[t.id];});
+  rebuildSnippets();rebuildKeybindings();rebuildCommands();
+  if(state.settings.theme&&!themeList().find(t=>t.id===state.settings.theme))state.settings.theme='ban-dark';
+  if(state.monacoReady)applyTheme(state.settings.theme);
+  rebuildMenus();
+  renderSidebar();updateExtCount();
+  toast('Uninstalled "'+x.name+'"','info');
+}
+function viewExtension(id){const x=state.extensions.find(e=>e.id===id);if(!x)return;
+  openModal('<h2>🧩 '+esc(x.name)+'</h2><p>'+esc(x.description||'')+' · v'+esc(x.version||'')+' · by '+esc(x.publisher||'')+'</p><textarea readonly>'+esc(JSON.stringify(x,null,2))+'</textarea><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');}
+function installFromFile(file){
+  const reader=new FileReader();
+  reader.onload=()=>{try{const m=JSON.parse(reader.result);installExtension(m,file.name);}catch(e){toast('That JSON is not valid JSON: '+e.message,'error');}};
+  reader.readAsText(file);
+}
+// drag & drop install anywhere
+let _dropC=0;
+document.addEventListener('dragover',e=>{e.preventDefault();_dropC++;$('#dropmask').style.display='block';});
+document.addEventListener('dragleave',e=>{_dropC--;if(_dropC<=0){_dropC=0;$('#dropmask').style.display='none';}});
+document.addEventListener('drop',e=>{e.preventDefault();_dropC=0;$('#dropmask').style.display='none';
+  const files=Array.from(e.dataTransfer.files||[]);
+  files.forEach(f=>{if(/\.json$/i.test(f.name)||f.type==='application/json')installFromFile(f);else toast('Only .json extension files can be installed: '+f.name,'error');});});
+function openExtensionsPanel(){state.activityView='extensions';state.sidebarVisible=true;renderActivityBar();renderSidebar();}
+
+/* ---------- settings ---------- */
+function renderSettings(body){
+  const s=state.settings;
+  const setRow=(id,label,desc,control)=>'<div class="set-row"><div><div class="lbl">'+label+'</div><div class="desc">'+desc+'</div></div>'+control+'</div>';
+  body.innerHTML=
+    '<div class="sec-title">Editor</div>'
+    +setRow('theme','Color Theme','Applied live','<select id="st-theme">'+themeList().map(t=>'<option value="'+t.id+'" '+(s.theme===t.id?'selected':'')+'>'+t.label+'</option>').join('')+'</select>')
+    +setRow('fontSize','Font Size','px','<input type="number" id="st-font" min="8" max="40" value="'+s.fontSize+'" style="width:60px">')
+    +setRow('tabSize','Tab Size','spaces per tab','<input type="number" id="st-tab" min="1" max="8" value="'+s.tabSize+'" style="width:60px">')
+    +setRow('wordWrap','Word Wrap','wrap at viewport','<span class="switch '+(s.wordWrap?'on':'')+'" id="st-wrap"></span>')
+    +setRow('minimap','Minimap','show minimap','<span class="switch '+(s.minimap?'on':'')+'" id="st-mini"></span>')
+    +setRow('lineNumbers','Line Numbers','show line numbers','<span class="switch '+(s.lineNumbers?'on':'')+'" id="st-line"></span>')
+    +setRow('bracketPairColorization','Bracket Color','colorize pairs','<span class="switch '+(s.bracketPairColorization?'on':'')+'" id="st-brk"></span>')
+    +setRow('cursorBlinking','Cursor Blink','style','<select id="st-cur"><option '+(s.cursorBlinking==='blink'?'selected':'')+'>blink</option><option '+(s.cursorBlinking==='smooth'?'selected':'')+'>smooth</option><option '+(s.cursorBlinking==='phase'?'selected':'')+'>phase</option><option '+(s.cursorBlinking==='solid'?'selected':'')+'>solid</option></select>')
+    +setRow('formatOnSave','Format On Save','format JSON files on save','<span class="switch '+(s.formatOnSave?'on':'')+'" id="st-fos"></span>')
+    +'<div class="divider"></div><div class="sec-title">Reset</div><button class="btn sm block" onclick="ui.resetSettings()">↺ Reset to defaults</button>'
+    +'<div class="divider"></div><div class="sec-title">Data</div><button class="btn sm block danger" onclick="ui.clearAllData()">🗑 Clear All Data</button>';
+  $('#st-theme').onchange=e=>{s.theme=e.target.value;persistSettings();applyTheme(s.theme);};
+  const fontEl=$('#st-font');
+  fontEl.oninput=e=>{const v=parseInt(e.target.value);if(v>=8&&v<=40){s.fontSize=v;persistSettings();applyEditorSettings();}};
+  fontEl.onchange=e=>{s.fontSize=parseInt(e.target.value)||14;persistSettings();applyEditorSettings();renderStatusbar();};
+  const tabEl=$('#st-tab');
+  tabEl.oninput=e=>{const v=parseInt(e.target.value);if(v>=1&&v<=8){s.tabSize=v;persistSettings();applyEditorSettings();}};
+  tabEl.onchange=e=>{s.tabSize=parseInt(e.target.value)||2;persistSettings();applyEditorSettings();renderStatusbar();};
+  sw('#st-wrap',v=>{s.wordWrap=v;persistSettings();applyEditorSettings();});
+  sw('#st-mini',v=>{s.minimap=v;persistSettings();applyEditorSettings();});
+  sw('#st-line',v=>{s.lineNumbers=v;persistSettings();applyEditorSettings();});
+  sw('#st-brk',v=>{s.bracketPairColorization=v;persistSettings();applyEditorSettings();});
+  $('#st-cur').onchange=e=>{s.cursorBlinking=e.target.value;persistSettings();applyEditorSettings();};
+  sw('#st-fos',v=>{s.formatOnSave=v;persistSettings();});
+}
+function resetSettings(){state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false};persistSettings();applyTheme('ban-dark');applyEditorSettings();renderSidebar();renderStatusbar();toast('Settings reset to defaults','success');}
+
+/* ---------- menus ---------- */
+let _openMenu=null;
+function buildMenus(){
+  const menus=[
+    {id:'file',label:'File',items:[
+      ['New Project','Ctrl+N','🆕',()=>ui.newProject()],
+      ['Open JSON...','','📂',()=>ui.loadProjectJson()],
+      ['Import Folder as Project...','','📦',()=>ui.importFolder()],
+      ['Download JSON','Ctrl+Shift+S','💾',()=>ui.saveProject()],
+      ['SEP'],
+      ['New File','','＋',()=>ui.newFile()],
+      ['New Folder','','📁',()=>ui.newFolder()],
+      ['SEP'],
+      ['Install Extension...','','🧩',()=>ui.installExtension()],
+      ['SEP'],
+      ['Export as ZIP','','📦',()=>ui.exportZip()],
+      ['SEP'],
+      ['Save File','Ctrl+S','💾',()=>ui.save()],
+      ['SEP'],
+      ['Close Editor','Ctrl+W','✕',()=>ui.closeActive()],
+      ['Close All','','✕',()=>ui.closeAll()],
+    ]},
+    {id:'edit',label:'Edit',items:[
+      ['Command Palette...','Ctrl+Shift+P','🧩',()=>ui.showPalette('cmd')],
+      ['Quick Open File','Ctrl+P','📜',()=>ui.showPalette('files')],
+      ['SEP'],
+      ['Undo','Ctrl+Z','↶',()=>ui.exec('undo')],
+      ['Redo','Ctrl+Y','↷',()=>ui.exec('redo')],
+      ['SEP'],
+      ['Find','Ctrl+F','🔍',()=>ui.exec('find')],
+      ['Replace','Ctrl+H','↔',()=>ui.exec('replace')],
+    ]},
+    {id:'view',label:'View',items:[
+      ['Toggle Sidebar','Ctrl+B','◧',()=>ui.toggleSidebar()],
+      ['Toggle Terminal','Ctrl+`','⚡',()=>toggleTerminal()],
+      ['SEP'],
+      ['Explorer','Ctrl+Shift+E','🗂',()=>ui.activate('explorer')],
+      ['Search','Ctrl+Shift+F','🔍',()=>ui.activate('search')],
+      ['Extensions','Ctrl+Shift+X','🧩',()=>ui.activate('extensions')],
+      ['Settings','Ctrl+,','⚙️',()=>ui.activate('settings')],
+      ['SEP'],
+      ['Zoom In','Ctrl+=','＋',()=>ui.zoom(1)],
+      ['Zoom Out','Ctrl+-','－',()=>ui.zoom(-1)],
+      ['Reset Zoom','Ctrl+0','⤾',()=>ui.resetZoom()],
+    ]},
+    {id:'help',label:'Help',items:[
+      ['Welcome','','🏠',()=>ui.showWelcome()],
+      ['Keyboard Shortcuts','','⌨️',()=>ui.showShortcuts()],
+      ['About Ban Code','','🚫',()=>ui.about()],
+      ['SEP'],
+      ['Documentation (VS Code)','','📖',()=>window.open('https://code.visualstudio.com/docs','_blank')],
+    ]},
+  ];
+  // inject extension commands into a "Commands" menu
+  if(_extCommands.length){
+    menus.push({id:'ext',label:'Commands',items:_extCommands.map(c=>[c.title,'',c.icon||'🧩',()=>runExtCommand(c)])});
+  }
+  const bar=$('#menubar');
+  bar.innerHTML=menus.map(m=>'<button data-m="'+m.id+'">'+m.label+'</button>').join('');
+  $$('#menubar>button').forEach(b=>b.onclick=()=>{
+    if(_openMenu===b.getAttribute('data-m')){closeMenus();return;}
+    closeMenus();_openMenu=b.getAttribute('data-m');
+    const m=menus.find(x=>x.id===_openMenu);
+    b.classList.add('open');
+    const dd=document.createElement('div');dd.className='dropdown';
+    dd.innerHTML=m.items.map(it=>{
+      if(it[0]==='SEP')return '<div class="menu-sep"></div>';
+      return '<button class="menu-item" data-idx="'+m.items.indexOf(it)+'" data-mid="'+m.id+'"><span class="ic">'+it[2]+'</span><span class="label">'+it[0]+'</span><span class="kbd">'+esc(it[1]||'')+'</span></button>';
+    }).join('');
+    b.appendChild(dd);
+    $$('.menu-item',dd).forEach(mi=>mi.onclick=()=>{const mm=menus.find(x=>x.id===mi.getAttribute('data-mid'));mm.items[+mi.getAttribute('data-idx')][3]();closeMenus();});
+  });
+  document.addEventListener('click',e=>{if(!e.target.closest('#menubar'))closeMenus();});
+}
+function closeMenus(){_openMenu=null;$$('#menubar .open').forEach(x=>{x.classList.remove('open');$$('.dropdown',x).forEach(d=>d.remove());});}
+
+/* ---------- command palette / quick open ---------- */
+let _paletteItems=[],_palMode='cmd',_palSel=0;
+function openPalette(mode){_palMode=mode;_palSel=0;$('#palette-input').value='';
+  const inp=$('#palette-input');inp.placeholder=mode==='cmd'?'Type a command (Ctrl+Shift+P)...':'Type to open a file...';
+  $('#palette-overlay').classList.add('open');buildPalette('');inp.focus();}
+function closePalette(){$('#palette-overlay').classList.remove('open');}
+function buildPalette(q){
+  let items=[];
+  if(_palMode==='cmd'){
+    items=[
+      {t:'New Project',d:'Ctrl+N',p:()=>ui.newProject()},{t:'Open JSON',p:()=>ui.loadProjectJson()},{t:'Import Folder',p:()=>ui.importFolder()},{t:'Download JSON',d:'Ctrl+Shift+S',p:()=>ui.saveProject()},
+      {t:'New File',p:()=>ui.newFile()},{t:'New Folder',p:()=>ui.newFolder()},
+      {t:'Save File',d:'Ctrl+S',p:()=>ui.save()},{t:'Export as ZIP',p:()=>ui.exportZip()},{t:'Install Extension',p:()=>ui.installExtension()},
+      {t:'Toggle Terminal',d:'Ctrl+`',p:()=>toggleTerminal()},{t:'Toggle Sidebar',d:'Ctrl+B',p:()=>ui.toggleSidebar()},
+      {t:'Show Welcome',p:()=>ui.showWelcome()},{t:'Reset Settings',p:()=>ui.resetSettings()},
+      {t:'Open Settings',d:'Ctrl+,',p:()=>ui.activate('settings')},{t:'Search Files',d:'Ctrl+Shift+F',p:()=>ui.activate('search')},
+      {t:'Open Extensions',d:'Ctrl+Shift+X',p:()=>ui.activate('extensions')},
+      {t:'Keyboard Shortcuts',p:()=>ui.showShortcuts()},{t:'About',p:()=>ui.about()},
+    ];
+    _extCommands.forEach(c=>items.push({t:'🧩 '+c.title,d:'ext',p:()=>runExtCommand(c)}));
+  }else{
+    const all=state.fileList.flatMap(n=>n.type==='file'?[n]:(n.children||[]));
+    items=all.map(f=>({t:fileIcon(f.name)+' '+f.name,d:path(f),p:()=>openNode(f)}));
+    if(!items.length)items=[{t:'(empty workspace)',p:()=>toast('Add a file first','info')}];
+  }
+  const ql=q.toLowerCase();
+  items=items.filter(i=>!ql||i.t.toLowerCase().includes(ql));
+  _paletteItems=items;_palSel=Math.min(_palSel,items.length-1);
+  renderPaletteList();
+}
+function path(node){return node.path||node.name;}
+function renderPaletteList(){
+  const list=$('#palette-list');
+  if(!_paletteItems.length){list.innerHTML='<div class="muted" style="padding:14px;text-align:center">No results</div>';return;}
+  list.innerHTML=_paletteItems.map((i,idx)=>'<div class="palette-item '+(idx===_palSel?'sel':'')+'" data-i="'+idx+'"><span>'+i.t+'</span><span class="pk">'+esc(i.d||'')+'</span></div>').join('');
+  $$('#palette-list .palette-item').forEach(el=>{el.onmouseenter=()=>{_palSel=+el.getAttribute('data-i');renderPaletteList();};el.onclick=()=>{closePalette();const it=_paletteItems[+el.getAttribute('data-i')];if(it&&typeof it.p==='function')it.p();};});
+  const sel=$('#palette-list .sel');if(sel)sel.scrollIntoView({block:'nearest'});
+}
+$('#palette-input').addEventListener('input',e=>{_palSel=0;buildPalette(e.target.value);});
+$('#palette-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();const it=_paletteItems[_palSel];if(it&&typeof it.p==='function'){closePalette();it.p();}}
+  else if(e.key==='ArrowDown'){e.preventDefault();_palSel=Math.min(_palSel+1,_paletteItems.length-1);renderPaletteList();}
+  else if(e.key==='ArrowUp'){e.preventDefault();_palSel=Math.max(_palSel-1,0);renderPaletteList();}
+  else if(e.key==='Escape'){closePalette();}
+});
+$('#palette-overlay').addEventListener('click',e=>{if(e.target.id==='palette-overlay')closePalette();});
+
+/* ---------- modal ---------- */
+function openModal(html){$('#modal').innerHTML=html;$('#modal-overlay').classList.add('open');}
+function closeModal(){$('#modal-overlay').classList.remove('open');}
+$('#modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay')closeModal();});
+
+/* ---------- file io (open/save/export) ---------- */
+const ui={
+  newProject(){const name=prompt('Project name:','my-project');if(!name||!name.trim())return;const proj={name:name.trim(),version:'1.0.0',files:[]};state.fileList=[{id:uid(),name:proj.name,type:'folder',isOpen:true,children:[],path:proj.name}];state.projectJson=proj;renderExplorer();renderStatusbar();},
+  newFileAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('File name (e.g. index.html):','untitled.txt');if(name&&name.trim())createFile(name.trim(),'',null,parentId);},
+  newFile(){this.newFileAt(state.fileList[0]&&state.fileList[0].id||null);},
+  newFolderAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('Folder name:','new-folder');if(name&&name.trim())createFolder(name.trim(),parentId);},
+  newFolder(){this.newFolderAt(state.fileList[0]&&state.fileList[0].id||null);},
+  installExtension(){$('#install-ext-input').click();},
+  loadProjectJson(){$('#load-project-input').click();},
+  importFolder(){$('#import-folder-input').click();},
+  saveProject(){if(!state.fileList.length){toast('No project open','info');return;}const root=state.fileList[0];state.openFiles.forEach(f=>{const n=findNode(state.fileList,f.id);if(n)n.content=f.content;});const proj=state.projectJson||{name:root.name,version:'1.0.0'};proj.files=flattenProject(root.children,root.name);const json=JSON.stringify(proj,null,2);download(proj.name+'.json',json);state.projectJson=proj;state.projectDirty=false;state.openFiles.forEach(f=>{f.modified=false;});renderTabs();renderStatusbar();toast('Downloaded '+proj.name+'.json','success');},
+  save(){
+    const f=currentOpen();if(!f)return toast('No file open','info');
+    let content=f.content;
+    // Format JSON on save if enabled
+    if(state.settings.formatOnSave&&langFromName(f.name)==='json'){
+      try{content=JSON.stringify(JSON.parse(content),null,state.settings.tabSize);}catch(e){}
+    }
+    download(f.name,content);f.content=content;f.modified=false;renderTabs();renderStatusbar();toast('Saved '+f.name,'success');
+    // also sync back into project tree
+    const node=findNode(state.fileList,f.id);
+    if(node){node.content=content;state.projectDirty=true;renderStatusbar();}
+  },
+  saveAs(){const f=currentOpen();if(!f)return toast('No file open','info');const n=prompt('Save as:',f.name);if(n&&n.trim()){download(n.trim(),f.content);f.name=n.trim();renderTabs();toast('Saved as '+n,'success');}},
+  closeActive(){if(state.activeFileId)closeFile(state.activeFileId);},
+  closeAll(){state.openFiles.slice().forEach(f=>closeFile(f.id));toast('Closed all editors','info');},
+  toggleSidebar(){state.sidebarVisible=!state.sidebarVisible;renderSidebar();},
+  activate(v){state.activityView=v;state.sidebarVisible=true;renderActivityBar();renderSidebar();},
+  showPalette(m){openPalette(m);},
+  showWelcome(){state.openFiles.slice().forEach(f=>closeFile(f.id));renderEditor();},
+  showShortcuts(){openModal('<h2>⌨️ Keyboard Shortcuts</h2><p>Common shortcuts you can use.</p><div class="codeblock">'
+    +'Ctrl+N       New Project\nCtrl+S       Save File\nCtrl+Shift+S Download JSON\nCtrl+W       Close Editor\n'
+    +'Ctrl+`       Terminal\nCtrl+B       Sidebar\n'
+    +'Ctrl+Shift+P Command Palette\nCtrl+P       Quick Open\n'
+    +'Ctrl+Shift+F Search\nCtrl+Shift+X Extensions\n'
+    +'Ctrl+,       Settings\nCtrl+= / Ctrl+- Zoom\n</div><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
+  about(){toast('🚫 Ban Code v2.0 — extension-powered editor','info');openModal('<h2>🚫 Ban Code v2.0</h2><p>A lightweight, extension-powered code editor that runs in a single HTML file.<br>Extensions are plain .json files you can install and uninstall.</p><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
+  exec(a){if(a==='undo'&&state.editor)state.editor.trigger('','undo');if(a==='redo'&&state.editor)state.editor.trigger('','redo');if(a==='find'&&state.editor)state.editor.trigger('','actions.find');if(a==='replace'&&state.editor)state.editor.trigger('','editor.action.startFindReplaceAction');},
+  zoom(d){const n=Math.max(8,Math.min(40,(state.settings.fontSize||14)+d));state.settings.fontSize=n;persistSettings();applyEditorSettings();renderStatusbar();
+    // update settings panel if visible
+    const fontInput=$('#st-font');if(fontInput)fontInput.value=n;},
+  resetZoom(){state.settings.fontSize=14;persistSettings();applyEditorSettings();renderStatusbar();
+    const fontInput=$('#st-font');if(fontInput)fontInput.value=14;},
+  resetSettings(){resetSettings();},
+  closeModal(){closeModal();},
+  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',formatOnSave:false};if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildSnippets();rebuildKeybindings();rebuildCommands();buildMenus();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
+  exportZip(){exportZip();},
+};
+function download(name,content){const b=new Blob([content],{type:'text/plain'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
+function getFileNodes(){return state.fileList;}
+
+/* ---------- native ZIP creator (no library) ---------- */
+async function nativeZip(files){
+  /* files: [{name:string, content:string}] */
+  const encoder=new TextEncoder();
+  const entries=[];
+  let offset=0;
+  for(const f of files){
+    const data=encoder.encode(f.content||'');
+    let compressed=data;
+    let method=0; // 0=stored
+    if(typeof CompressionStream!=='undefined'){
+      try{
+        const cs=new CompressionStream('deflate-raw');
+        const w=cs.writable.getWriter();w.write(data);w.close();
+        compressed=new Uint8Array(await new Response(cs.readable).arrayBuffer());
+        method=8; // 8=deflated
+      }catch(e){}
+    }
+    const nameBytes=encoder.encode(f.name);
+    entries.push({nameBytes,data,compressed,method,crc:crc32(data),offset});
+    offset+=30+nameBytes.length+compressed.length;
+  }
+  const cdOffset=offset;
+  let cdSize=0;
+  for(const e of entries){cdSize+=46+e.nameBytes.length;}
+  const buf=new ArrayBuffer(cdOffset+cdSize+22);
+  const v=new DataView(buf);const u8=new Uint8Array(buf);
+  let pos=0;
+  for(const e of entries){
+    // local file header
+    v.setUint32(pos,0x04034b50,true);pos+=4;
+    v.setUint16(pos,20,true);pos+=2; // version needed
+    v.setUint16(pos,0,true);pos+=2; // flags
+    v.setUint16(pos,e.method,true);pos+=2; // compression
+    v.setUint16(pos,0,true);pos+=2; // mod time
+    v.setUint16(pos,0,true);pos+=2; // mod date
+    v.setUint32(pos,e.crc,true);pos+=4;
+    v.setUint32(pos,e.compressed.length,true);pos+=4; // compressed size
+    v.setUint32(pos,e.data.length,true);pos+=4; // uncompressed size
+    v.setUint16(pos,e.nameBytes.length,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2; // extra field len
+    u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;
+    u8.set(e.compressed,pos);pos+=e.compressed.length;
+  }
+  // central directory
+  for(const e of entries){
+    v.setUint32(pos,0x02014b50,true);pos+=4;
+    v.setUint16(pos,20,true);pos+=2; // version made by
+    v.setUint16(pos,20,true);pos+=2; // version needed
+    v.setUint16(pos,0,true);pos+=2; // flags
+    v.setUint16(pos,e.method,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2; // mod time
+    v.setUint16(pos,0,true);pos+=2; // mod date
+    v.setUint32(pos,e.crc,true);pos+=4;
+    v.setUint32(pos,e.compressed.length,true);pos+=4;
+    v.setUint32(pos,e.data.length,true);pos+=4;
+    v.setUint16(pos,e.nameBytes.length,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2; // extra
+    v.setUint16(pos,0,true);pos+=2; // comment
+    v.setUint16(pos,0,true);pos+=2; // disk#
+    v.setUint16(pos,0,true);pos+=2; // internal attr
+    v.setUint32(pos,0,true);pos+=4; // external attr
+    v.setUint32(pos,e.offset,true);pos+=4;
+    u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;
+  }
+  // end of central directory
+  v.setUint32(pos,0x06054b50,true);pos+=4;
+  v.setUint16(pos,0,true);pos+=2;
+  v.setUint16(pos,0,true);pos+=2;
+  v.setUint16(pos,entries.length,true);pos+=2;
+  v.setUint16(pos,entries.length,true);pos+=2;
+  v.setUint32(pos,cdSize,true);pos+=4;
+  v.setUint32(pos,cdOffset,true);pos+=4;
+  v.setUint16(pos,0,true);pos+=2;
+  return new Blob([buf],{type:'application/zip'});
+}
+function crc32(data){let c=0xFFFFFFFF;const t=new Uint8Array(data);for(let i=0;i<t.length;i++){c^=t[i];for(let j=0;j<8;j++){c=(c>>>1)^(c&1?0xEDB88320:0);}}return(c^0xFFFFFFFF)>>>0;}
+
+function collectFiles(nodes,base){
+  const out=[];
+  (nodes||[]).forEach(n=>{
+    const p=base?(base+'/'+n.name):n.name;
+    if(n.type==='folder'){if(n.children)out.push(...collectFiles(n.children,p));}
+    else{out.push({name:p,content:n.content||''});}
+  });
+  return out;
+}
+
+async function exportZip(){
+  if(!state.fileList.length)return toast('Nothing to export','info');
+  try{
+    const files=collectFiles(state.fileList,null);
+    const blob=await nativeZip(files);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=(state.fileList[0]&&state.fileList[0].name||'project')+'.zip';
+    a.click();URL.revokeObjectURL(url);
+    toast('Exported ZIP ('+files.length+' files)','success');
+  }catch(e){toast('ZIP export failed: '+e.message,'error');}
+}
+
+function flattenProject(nodes,path){
+  const out=[];
+  (nodes||[]).forEach(n=>{
+    const p=path?(path+'/'+n.name):n.name;
+    if(n.type==='folder'){out.push({type:'folder',name:n.name,children:flattenProject(n.children,p)});}
+    else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
+  });
+  return out;
+}
+
+/* ---------- file input handlers ---------- */
+$('#import-folder-input').addEventListener('change',async e=>{
+  const files=Array.from(e.target.files||[]);if(!files.length)return;
+  const rootName=files[0].webkitRelativePath.split('/')[0]||'imported-project';
+  toast('Importing folder "'+rootName+'"...','info');
+  // Build nested tree from flat file list
+  const root={type:'folder',name:rootName,children:[]};
+  for(const f of files){
+    const parts=f.webkitRelativePath.split('/');parts.shift();
+    let cur=root.children;
+    for(let i=0;i<parts.length-1;i++){let d=cur.find(c=>c.type==='folder'&&c.name===parts[i]);if(!d){d={type:'folder',name:parts[i],children:[]};cur.push(d);}cur=d.children;}
+    const content=await f.text();
+    cur.push({type:'file',name:parts[parts.length-1],content:content});
+  }
+  // Build flat file list for JSON project format
+  function toFlat(nodes,basePath){
+    const out=[];
+    (nodes||[]).forEach(n=>{
+      const p=basePath?(basePath+'/'+n.name):n.name;
+      if(n.type==='folder'){out.push({type:'folder',name:n.name,children:toFlat(n.children,p)});}
+      else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
+    });
+    return out;
+  }
+  const proj={name:rootName,version:'1.0.0',files:toFlat(root.children,rootName)};
+  state.fileList=[{id:uid(),name:rootName,type:'folder',isOpen:true,children:buildNodeTree(proj.files,rootName),path:rootName}];
+  state.projectJson=proj;state.projectDirty=false;
+  renderExplorer();renderStatusbar();
+  download(rootName+'.json',JSON.stringify(proj,null,2));
+  toast('Imported "'+rootName+'" ('+files.length+' files) — saved as '+rootName+'.json','success');
+  e.target.value='';
+});
+$('#install-ext-input').addEventListener('change',e=>{
+  const files=Array.from(e.target.files||[]);
+  files.forEach(f=>{if(/\.json$/i.test(f.name))installFromFile(f);else toast('Only .json extension files: '+f.name,'error');});
+  e.target.value='';
+});
+$('#load-project-input').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{const t=JSON.parse(r.result);if(t&&t.files&&Array.isArray(t.files)){let fl=t.files;if(fl.length>=1&&fl[0].type==='folder'&&fl[0].name===(t.name||'project')){fl=fl[0].children||[];}state.fileList=[{id:uid(),name:t.name||'project',type:'folder',isOpen:true,children:buildNodeTree(fl,t.name||'project'),path:t.name||'project'}];state.projectJson=t;state.projectDirty=false;renderExplorer();renderStatusbar();toast('Loaded project "'+(t.name||'project')+'"','success');}else if(t&&t.contributes){installExtension(t,f.name);}else{toast('JSON is neither a project nor an extension manifest','error');}}catch(err){toast('Invalid JSON: '+err.message,'error');}};
+  r.readAsText(f);e.target.value='';
+});
+function buildNodeTree(arr,parentPath){return arr.map(item=>{if(item.type==='folder'){const p=parentPath?parentPath+'/'+item.name:item.name;return{id:uid(),name:item.name,type:'folder',isOpen:true,children:buildNodeTree(item.children||[],p),path:p};}return{id:uid(),name:item.name,type:'file',language:langFromName(item.name),content:item.content||'',path:item.path||item.name};});}
+
+/* ---------- keyboard ---------- */
+function combo(e){let k=e.key.toLowerCase();if(k===' ')k='space';let c='';if(e.ctrlKey||e.metaKey)c+='ctrl+';if(e.altKey)c+='alt+';if(e.shiftKey)c+='shift+';c+=k;return c;}
+function isTypingTarget(e){const t=e.target;return t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable||t.classList&&t.classList.contains('monaco-editor'));}
+document.addEventListener('keydown',e=>{
+  // Extension keybindings
+  const c=combo(e);
+  for(const kb of _extKeybinds){if(kb.key===c){kb.handler();e.preventDefault();return;}}
+  const ctrl=e.ctrlKey||e.metaKey;
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();openPalette('cmd');return;}
+  if(ctrl&&!e.shiftKey&&(e.key==='+'||e.key==='=')){e.preventDefault();ui.zoom(1);return;}
+  if(ctrl&&!e.shiftKey&&e.key==='-'){e.preventDefault();ui.zoom(-1);return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();openPalette('files');return;}
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='x'){e.preventDefault();ui.activate('extensions');return;}
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='f'){e.preventDefault();ui.activate('search');return;}
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='e'){e.preventDefault();ui.activate('explorer');return;}
+  if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='s'){e.preventDefault();ui.saveProject();return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()==='s'){e.preventDefault();ui.save();return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()==='w'){e.preventDefault();ui.closeActive();return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()==='b'){e.preventDefault();ui.toggleSidebar();return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()===','){e.preventDefault();ui.activate('settings');return;}
+  if(ctrl&&!e.shiftKey&&e.key==='`'){e.preventDefault();toggleTerminal();return;}
+  if(ctrl&&!e.shiftKey&&e.key.toLowerCase()==='n'){e.preventDefault();ui.newProject();return;}
+  if(ctrl&&!e.shiftKey&&e.key==='0'){e.preventDefault();ui.resetZoom();return;}
+});
+
+/* ---------- boot ---------- */
+function renderAll(){renderActivityBar();renderSidebar();renderTabs();renderEditor();renderStatusbar();updateExtCount();buildMenus();}
+function boot(){
+  // restore installed extensions
+  state.extensions=LS.get('extensions',[]);
+  state.extensions.forEach(x=>{registerExtensionSnippets(x);installKeybindings(x);installCommands(x);});
+  rebuildSnippets();rebuildKeybindings();rebuildCommands();
+  buildMenus();
+  applyTheme(state.settings.theme);
+  renderActivityBar();renderSidebar();renderTabs();renderStatusbar();updateExtCount();
+  renderWelcome();
+  initMonaco();
+
+}
+// wire the term head buttons already bound above
+window.ui=ui;window.toggleTerminal=toggleTerminal;
+boot();
+</script>
+</body>
+</html>

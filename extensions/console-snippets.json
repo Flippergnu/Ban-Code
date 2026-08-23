@@ -1,0 +1,30 @@
+{
+  "id": "ban.console-snippets",
+  "name": "Console Snippets",
+  "version": "1.0.0",
+  "publisher": "Ban Code",
+  "description": "Fast snippets and a couple of handy commands for JavaScript / TypeScript.",
+  "icon": "🧪",
+  "contributes": {
+    "commands": [
+      { "id": "cs.open", "title": "Insert a Hello World log", "action": "insert", "arg": "console.log('Hello, world! 🚀');" },
+      { "id": "cs.terminal", "title": "Print to Terminal", "action": "terminal", "arg": "✨ This message came from the Console Snippets extension!" }
+    ],
+    "snippets": {
+      "javascript": [
+        { "label": "log", "prefix": "log", "body": ["console.log(${1:value});", "$2"], "description": "console.log" },
+        { "label": "warn", "prefix": "warn", "body": ["console.warn(${1:value});"], "description": "console.warn" },
+        { "label": "error", "prefix": "error", "body": ["console.error(${1:value});"], "description": "console.error" },
+        { "label": "table", "prefix": "table", "body": ["console.table(${1:data});"], "description": "console.table" }
+      ],
+      "typescript": [
+        { "label": "log", "prefix": "log", "body": ["console.log(${1:value});"], "description": "console.log" },
+        { "label": "arrow", "prefix": "arrow", "body": ["const ${1:name} = (${2:params}) => {", "\t$3", "};"], "description": "Arrow function" }
+      ]
+    },
+    "terminalCommands": {
+      "hi": "👋 Hello from the Console Snippets extension!",
+      "log": "📌 You can also type custom commands here."
+    }
+  }
+}

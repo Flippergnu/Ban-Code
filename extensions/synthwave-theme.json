@@ -1,0 +1,37 @@
+{
+  "id": "ban.synthwave",
+  "name": "Synthwave '84",
+  "version": "1.2.0",
+  "publisher": "Ban Code",
+  "description": "A neon-retro color theme for the editor.",
+  "icon": "🌆",
+  "license": "MIT",
+  "contributes": {
+    "themes": [
+      {
+        "id": "ban.synthwave",
+        "label": "Synthwave '84",
+        "base": "vs-dark",
+        "colors": {
+          "editor.background": "#241b2f",
+          "editor.foreground": "#e6e6e6",
+          "editor.lineHighlightBackground": "#1f1830",
+          "editorCursor.foreground": "#fe4450",
+          "editor.selectionBackground": "#3d2b54",
+          "editor.lineNumber.foreground": "#6a5c84",
+          "editorIndentGuide.activeBackground": "#6a5c84"
+        },
+        "rules": [
+          { "token": "comment", "foreground": "#6a5c84", "fontStyle": "italic" },
+          { "token": "keyword", "foreground": "#ff7edb" },
+          { "token": "string", "foreground": "#f97e72" },
+          { "token": "number", "foreground": "#f97e72" },
+          { "token": "function", "foreground": "#f4f4f4" },
+          { "token": "type", "foreground": "#00f0ff" },
+          { "token": "variable", "foreground": "#72f1b8" },
+          { "token": "delimiter", "foreground": "#e6e6e6" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "ban.git-tools",
+  "name": "Git Tools",
+  "version": "1.1.0",
+  "publisher": "Ban Code",
+  "description": "A few handy Git-flavored commands and a quick keybinding.",
+  "icon": "⎇",
+  "contributes": {
+    "commands": [
+      { "id": "git.status", "title": "Show Git Status", "action": "terminal", "arg": "On branch main — nothing to commit, working tree clean ✨" },
+      { "id": "git.branch", "title": "Show Current Branch", "action": "alert", "arg": "You are on branch: main" },
+      { "id": "git.log", "title": "Last 3 Commits", "action": "terminal", "arg": "* abc1234 (HEAD) feat: add extension system\n* 9f8e7d6 fix: improve theming\n* 1a2b3c4 initial commit" }
+    ],
+    "terminalCommands": {
+      "git-status": "Clean ✓ (simulated)",
+      "git-branch": "main"
+    },
+    "keybindings": [
+      { "key": "Ctrl+Shift+G", "command": "git.status", "title": "Show Git Status" }
+    ]
+  }
+}
