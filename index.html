@@ -2451,7 +2451,15 @@ async function nativeZipChunked(files,progress){
     };
   }
   var dt=dosDateTime();
+  var useZip64=false; // set automatically when classic ZIP32 limits are exceeded
 
+  function set64(v,pos,val){ // write a 64-bit unsigned little-endian value
+    v.setUint32(pos,(val>>>0),true);
+    v.setUint32(pos+4,((val/4294967296)>>>0),true);
+  }
+
+  /* Pass 1: build entries and compute each entry's byte offset.
+     No hard limits anymore: sizes/offsets/counts over ZIP32 bounds simply flag ZIP64. */
   for(var c=0;c<total;c+=CHUNK){
     if(progress.isCancelled())throw new Error('Cancelled');
     var end=Math.min(c+CHUNK,total);
@@ -2461,13 +2469,16 @@ async function nativeZipChunked(files,progress){
       if(f.directory&&!name.endsWith('/'))name+='/';
       var nameBytes=encoder.encode(name);
       if(nameBytes.length>0xFFFF)throw new Error('File path is too long: '+name);
-      if(data.length>0xFFFFFFFF)throw new Error('File is too large for ZIP32: '+name);
+      // Local header needs the ZIP64 extra field only when the sizes overflow 32 bits.
+      var localExtra=(data.length>0xFFFFFFFF)?20:0;
+      if(data.length>0xFFFFFFFF)useZip64=true;
       entries.push({
         nameBytes:nameBytes,data:data,compressed:data,method:0,crc:crc32(data),
-        offset:offset,directory:!!f.directory,time:dt.time,date:dt.date
+        offset:offset,directory:!!f.directory,time:dt.time,date:dt.date,
+        localExtra:localExtra,bigSize:data.length>0xFFFFFFFF
       });
-      offset+=30+nameBytes.length+data.length;
-      if(offset>0xFFFFFFFF)throw new Error('Project is too large for ZIP32 (over 4 GiB).');
+      offset+=30+nameBytes.length+localExtra+data.length;
+      if(offset>0xFFFFFFFF)useZip64=true;
     }
     progress.update(Math.round(end/Math.max(total,1)*80),
       'Preparing ZIP '+end.toLocaleString()+' / '+total.toLocaleString()+' files...');
@@ -2476,18 +2487,26 @@ async function nativeZipChunked(files,progress){
     await yieldToUI();
   }
 
-  if(entries.length>0xFFFF)throw new Error('Project has too many files for ZIP32 (maximum 65,535).');
+  if(entries.length>0xFFFF)useZip64=true; // classic EOCD counts are 16-bit
 
   progress.update(85,'Assembling ZIP archive...');
   progress.logTask('Writing local file headers...','active');
   await yieldToUI();
 
   var cdOffset=offset,cdSize=0;
-  for(var ei=0;ei<entries.length;ei++)cdSize+=46+entries[ei].nameBytes.length;
-  if(cdSize>0xFFFFFFFF||cdOffset>0xFFFFFFFF)throw new Error('ZIP central directory is too large.');
+  for(var ei=0;ei<entries.length;ei++){
+    var ee=entries[ei];
+    // Central directory needs the ZIP64 extra field if sizes or the header offset overflow.
+    ee.cdExtra=(ee.bigSize||ee.offset>0xFFFFFFFF)
+      ?((ee.bigSize?16:0)+(ee.offset>0xFFFFFFFF?8:0)+4):0;
+    cdSize+=46+ee.nameBytes.length+ee.cdExtra;
+  }
+  if(cdOffset>0xFFFFFFFF||cdSize>0xFFFFFFFF)useZip64=true;
 
-  var buf=new ArrayBuffer(cdOffset+cdSize+22),v=new DataView(buf),u8=new Uint8Array(buf),pos=0;
+  var tail=useZip64?(56+20+22):22; // zip64 EOCD + locator + standard EOCD, or just standard EOCD
+  var buf=new ArrayBuffer(cdOffset+cdSize+tail),v=new DataView(buf),u8=new Uint8Array(buf),pos=0;
   var flags=0x0800; // UTF-8 filenames
+  var ver=useZip64?45:20; // 45 == version needed for ZIP64 features
 
   var HEADER_CHUNK=1000;
   for(var c2=0;c2<entries.length;c2+=HEADER_CHUNK){
@@ -2495,17 +2514,24 @@ async function nativeZipChunked(files,progress){
     for(var i2=c2;i2<endH;i2++){
       var e=entries[i2];
       v.setUint32(pos,0x04034b50,true);pos+=4;
-      v.setUint16(pos,20,true);pos+=2;
+      v.setUint16(pos,ver,true);pos+=2;
       v.setUint16(pos,flags,true);pos+=2;
       v.setUint16(pos,e.method,true);pos+=2;
       v.setUint16(pos,e.time,true);pos+=2;
       v.setUint16(pos,e.date,true);pos+=2;
       v.setUint32(pos,e.crc>>>0,true);pos+=4;
-      v.setUint32(pos,e.compressed.length>>>0,true);pos+=4;
-      v.setUint32(pos,e.data.length>>>0,true);pos+=4;
+      if(e.bigSize){v.setUint32(pos,0xFFFFFFFF,true);pos+=4;v.setUint32(pos,0xFFFFFFFF,true);pos+=4;}
+      else{v.setUint32(pos,e.data.length>>>0,true);pos+=4;v.setUint32(pos,e.data.length>>>0,true);pos+=4;}
       v.setUint16(pos,e.nameBytes.length,true);pos+=2;
-      v.setUint16(pos,0,true);pos+=2;
+      v.setUint16(pos,e.localExtra,true);pos+=2;
       u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;
+      if(e.bigSize){
+        // ZIP64 extended-information extra field: uncompressed then compressed size
+        v.setUint16(pos,0x0001,true);pos+=2;
+        v.setUint16(pos,16,true);pos+=2;
+        set64(v,pos,e.data.length);pos+=8;
+        set64(v,pos,e.data.length);pos+=8;
+      }
       u8.set(e.compressed,pos);pos+=e.compressed.length;
     }
     progress.update(85+Math.round(endH/Math.max(entries.length,1)*8),
@@ -2520,35 +2546,64 @@ async function nativeZipChunked(files,progress){
   for(var i3=0;i3<entries.length;i3++){
     var e2=entries[i3];
     v.setUint32(pos,0x02014b50,true);pos+=4;
-    v.setUint16(pos,20,true);pos+=2;
-    v.setUint16(pos,20,true);pos+=2;
+    v.setUint16(pos,ver,true);pos+=2;
+    v.setUint16(pos,ver,true);pos+=2;
     v.setUint16(pos,flags,true);pos+=2;
     v.setUint16(pos,e2.method,true);pos+=2;
     v.setUint16(pos,e2.time,true);pos+=2;
     v.setUint16(pos,e2.date,true);pos+=2;
     v.setUint32(pos,e2.crc>>>0,true);pos+=4;
-    v.setUint32(pos,e2.compressed.length>>>0,true);pos+=4;
-    v.setUint32(pos,e2.data.length>>>0,true);pos+=4;
+    if(e2.bigSize){v.setUint32(pos,0xFFFFFFFF,true);pos+=4;v.setUint32(pos,0xFFFFFFFF,true);pos+=4;}
+    else{v.setUint32(pos,e2.data.length>>>0,true);pos+=4;v.setUint32(pos,e2.data.length>>>0,true);pos+=4;}
     v.setUint16(pos,e2.nameBytes.length,true);pos+=2;
-    v.setUint16(pos,0,true);pos+=2;
+    v.setUint16(pos,e2.cdExtra,true);pos+=2;
     v.setUint16(pos,0,true);pos+=2;
     v.setUint16(pos,0,true);pos+=2;
     v.setUint16(pos,e2.directory?0x10:0,true);pos+=2;
     v.setUint32(pos,e2.directory?0x10:0,true);pos+=4;
-    v.setUint32(pos,e2.offset>>>0,true);pos+=4;
+    if(e2.offset>0xFFFFFFFF){v.setUint32(pos,0xFFFFFFFF,true);pos+=4;}
+    else v.setUint32(pos,e2.offset>>>0,true);pos+=4;
     u8.set(e2.nameBytes,pos);pos+=e2.nameBytes.length;
+    if(e2.cdExtra){
+      v.setUint16(pos,0x0001,true);pos+=2;
+      v.setUint16(pos,e2.cdExtra-4,true);pos+=2;
+      if(e2.bigSize){set64(v,pos,e2.data.length);pos+=8;set64(v,pos,e2.data.length);pos+=8;}
+      if(e2.offset>0xFFFFFFFF){set64(v,pos,e2.offset);pos+=8;}
+    }
     if((i3+1)%1000===0)await yieldToUI();
   }
 
   progress.update(98,'Writing end of central directory...');
   await yieldToUI();
+
+  if(useZip64){
+    /* ZIP64 end of central directory record */
+    var z64pos=pos;
+    v.setUint32(pos,0x06064b50,true);pos+=4;
+    set64(v,pos,44);pos+=8;            // size of record (bytes after sig + size field)
+    v.setUint16(pos,ver,true);pos+=2;  // version made by
+    v.setUint16(pos,ver,true);pos+=2;  // version needed
+    v.setUint32(pos,0,true);pos+=4;    // number of this disk
+    v.setUint32(pos,0,true);pos+=4;    // disk with central directory
+    set64(v,pos,entries.length);pos+=8;// entries on this disk
+    set64(v,pos,entries.length);pos+=8;// total entries
+    set64(v,pos,cdSize);pos+=8;        // size of central directory
+    set64(v,pos,cdOffset);pos+=8;      // offset of central directory
+    /* ZIP64 end of central directory locator */
+    v.setUint32(pos,0x07064b50,true);pos+=4;
+    v.setUint32(pos,0,true);pos+=4;    // disk with zip64 eocd
+    set64(v,pos,z64pos);pos+=8;        // offset of zip64 eocd
+    v.setUint32(pos,1,true);pos+=4;    // total disks
+  }
+
+  /* Standard end of central directory record (fields clamped to max when ZIP64) */
   v.setUint32(pos,0x06054b50,true);pos+=4;
   v.setUint16(pos,0,true);pos+=2;
   v.setUint16(pos,0,true);pos+=2;
-  v.setUint16(pos,entries.length,true);pos+=2;
-  v.setUint16(pos,entries.length,true);pos+=2;
-  v.setUint32(pos,cdSize>>>0,true);pos+=4;
-  v.setUint32(pos,cdOffset>>>0,true);pos+=4;
+  v.setUint16(pos,useZip64?0xFFFF:entries.length,true);pos+=2;
+  v.setUint16(pos,useZip64?0xFFFF:entries.length,true);pos+=2;
+  v.setUint32(pos,useZip64?0xFFFFFFFF:cdSize>>>0,true);pos+=4;
+  v.setUint32(pos,useZip64?0xFFFFFFFF:cdOffset>>>0,true);pos+=4;
   v.setUint16(pos,0,true);pos+=2;
 
   progress.logTask('ZIP archive assembled successfully','done');
