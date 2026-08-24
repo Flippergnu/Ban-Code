@@ -1,0 +1,64 @@
+{
+  "id": "ban.productivity",
+  "name": "Productivity Pack",
+  "version": "1.0.0",
+  "publisher": "Ban Code",
+  "description": "Snippets, text transforms, file icons, extra languages and terminal helpers for everyday coding.",
+  "icon": "⚡",
+  "contributes": {
+    "commands": [
+      { "id": "prod.upper", "title": "Transform: UPPERCASE selection (or whole file)", "action": "javascript",
+        "arg": "const s=ban.getSelection(); if(s) ban.insert(s.toUpperCase()); else ban.setText(ban.getText().toUpperCase());" },
+      { "id": "prod.lower", "title": "Transform: lowercase selection (or whole file)", "action": "javascript",
+        "arg": "const s=ban.getSelection(); if(s) ban.insert(s.toLowerCase()); else ban.setText(ban.getText().toLowerCase());" },
+      { "id": "prod.header", "title": "Insert File Header Comment", "action": "multi",
+        "arg": [
+          { "action": "insert", "arg": "// ═══════════════════════════════\n// Made with Ban Code 🚫\n// \n// ═══════════════════════════════\n\n" }
+        ] },
+      { "id": "prod.timestamp", "title": "Insert Timestamp", "action": "javascript",
+        "arg": "ban.insert(new Date().toISOString());" },
+      { "id": "prod.workspace-report", "title": "Workspace Report (to terminal)", "action": "javascript",
+        "arg": "const st=ban.state(); const files=ban.files().filter(f=>f.type==='file'); ban.terminal('📊 Project: '+(st.project||'none')+' — '+files.length+' files, '+st.openCount+' open tabs');" },
+      { "id": "prod.sticky", "title": "Enable Sticky Scroll", "action": "setSetting",
+        "arg": { "stickyScroll": true } }
+    ],
+    "snippets": {
+      "javascript": [
+        { "prefix": "debounce", "body": ["function debounce(fn, ms = 250) {", "\tlet t;", "\treturn (...args) => {", "\t\tclearTimeout(t);", "\t\tt = setTimeout(() => fn(...args), ms);", "\t};", "}"], "description": "Debounce helper" },
+        { "prefix": "fetchjson", "body": ["const res = await fetch('${1:url}');", "const data = await res.json();", "$2"], "description": "Fetch JSON async/await" },
+        { "prefix": "forof", "body": ["for (const ${1:item} of ${2:items}) {", "\t$3", "}"], "description": "for...of loop" }
+      ],
+      "python": [
+        { "prefix": "main", "body": ["def main():", "\t${1:pass}", "", "", "if __name__ == '__main__':", "\tmain()"], "description": "__main__ guard" },
+        { "prefix": "classy", "body": ["class ${1:Name}:", "\tdef __init__(self${2:, args}):", "\t\t${3:pass}"], "description": "Class skeleton" }
+      ],
+      "html": [
+        { "prefix": "skel", "body": ["<!DOCTYPE html>", "<html lang=\"en\">", "<head>", "\t<meta charset=\"UTF-8\">", "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">", "\t<title>${1:Page}</title>", "</head>", "<body>", "\t$2", "</body>", "</html>"], "description": "HTML5 skeleton" }
+      ],
+      "css": [
+        { "prefix": "center", "body": ["display: flex;", "align-items: center;", "justify-content: center;"], "description": "Flexbox centering" }
+      ]
+    },
+    "keybindings": [
+      { "key": "Ctrl+Shift+U", "command": "prod.upper", "title": "UPPERCASE selection" },
+      { "key": "Ctrl+Alt+T", "command": "prod.timestamp", "title": "Insert timestamp" }
+    ],
+    "languages": [
+      { "id": "ini", "extensions": ["env", "properties"] },
+      { "id": "shell", "extensions": ["command"] }
+    ],
+    "fileIcons": {
+      "log": "📜",
+      "env": "🔐",
+      "bak": "🕓",
+      "todo": "☑️"
+    },
+    "settingsDefaults": {
+      "stickyScroll": true
+    },
+    "terminalCommands": {
+      "report": { "description": "workspace stats", "output": "Type 'report' after installing... just kidding — use the Workspace Report command in the palette! ⚡" },
+      "motivate": { "description": "a boost of motivation", "output": "💪 You're one commit away from greatness." }
+    }
+  }
+}

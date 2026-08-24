@@ -1,0 +1,95 @@
+{
+  "id": "ban.ui-studio",
+  "name": "UI Studio",
+  "version": "1.0.0",
+  "publisher": "Ban Code",
+  "description": "Reskin the whole editor: colors, corners, fonts, a Synthwave theme that paints the page chrome too, custom panels, status bar & activity bar items.",
+  "icon": "🎨",
+  "activationEvents": ["onStartup"],
+  "startupCommands": [],
+  "contributes": {
+    "ui": {
+      "accent": "#7c3aed",
+      "radius": 10,
+      "titlebar": "#1b1530",
+      "sidebar": "#201a35",
+      "activity": "#241d3d",
+      "css": "#menubar>button{font-weight:600} .tab.active{box-shadow:inset 0 2px 0 var(--accent)}"
+    },
+    "themes": [
+      {
+        "id": "uis.synthwave",
+        "label": "Synthwave (UI Studio)",
+        "base": "vs-dark",
+        "colors": {
+          "editor.background": "#191233",
+          "editor.foreground": "#e8e8ff",
+          "editorLineNumber.foreground": "#5a4d80",
+          "editor.selectionBackground": "#49346e",
+          "editorCursor.foreground": "#ff7edb"
+        },
+        "rules": [
+          { "token": "comment", "foreground": "#6a5c94", "fontStyle": "italic" },
+          { "token": "string", "foreground": "#ff9de2" },
+          { "token": "keyword", "foreground": "#8affff" },
+          { "token": "number", "foreground": "#f97e72" }
+        ],
+        "chrome": {
+          "bg": "#191233",
+          "sidebar": "#211840",
+          "activity": "#281d4d",
+          "titlebar": "#160f2e",
+          "accent": "#ff7edb",
+          "border": "#33265c",
+          "card": "#241a47",
+          "cardBorder": "#3a2b66",
+          "inputBg": "#2d2153",
+          "inputBorder": "#443277",
+          "selectBg": "#5a2a83",
+          "termBg": "#120c26",
+          "termHead": "#241a47"
+        }
+      }
+    ],
+    "commands": [
+      { "id": "uis.theme", "title": "Toggle Synthwave Theme", "action": "javascript",
+        "arg": "ban.theme(ban.setting('theme')==='uis.synthwave'?'ban-dark':'uis.synthwave'); ban.toast('Theme switched 🌈','success');" },
+      { "id": "uis.party", "title": "Party Mode 🎉", "action": "javascript",
+        "arg": "for(let i=0;i<6;i++)setTimeout(()=>ban.toast(['🎉','✨','🎊','💜'][i%4],'success',800),i*250);" },
+      { "id": "uis.round", "title": "UI: Toggle Rounded Corners", "action": "javascript",
+        "arg": "let s=document.getElementById('uis-round'); if(s){s.remove(); ban.toast('Squared corners','info');} else {s=document.createElement('style'); s.id='uis-round'; s.textContent='.btn,.ext-card,.modal,.dropdown,.palette,.dropzone,.toast,.ctx-menu{border-radius:3px}'; document.head.appendChild(s); ban.toast('Sharp corners','info');}" },
+      { "id": "uis.mdcopy", "title": "Copy Active File as Markdown Code Block", "action": "javascript",
+        "arg": "const f=ban.activeFile(); if(f){navigator.clipboard.writeText('```'+f.language+'\\n'+f.content+'\\n```'); ban.toast('Copied as markdown code block','success');} else ban.toast('No active file');" }
+    ],
+    "statusBarItems": [
+      { "id": "theme", "text": "🌈 Theme", "tooltip": "Toggle the Synthwave theme", "alignment": "right", "command": "uis.theme" },
+      { "id": "party", "text": "🎉", "tooltip": "Party mode!", "alignment": "left", "command": "uis.party" }
+    ],
+    "activityBarButtons": [
+      { "id": "studio", "icon": "🌈", "label": "Synthwave Panel", "view": "uis.panel" }
+    ],
+    "views": [
+      {
+        "id": "uis.panel",
+        "title": "UI Studio",
+        "icon": "🌈",
+        "html": "<h3>🌈 UI Studio</h3><p>This panel is pure HTML contributed by an extension JSON.</p><p style='margin-top:8px'>Try:</p><ul style='margin:6px 0 6px 18px'><li>Settings → pick <b>Synthwave</b></li><li>Status bar → click 🌈</li><li>Menu bar → <b>🎨 Studio</b></li></ul><p style='margin-top:8px;color:var(--dim)'>Extensions can restyle every corner of Ban Code.</p>"
+      }
+    ],
+    "menus": [
+      { "menu": "view", "items": [ { "command": "uis.theme", "title": "Switch to Synthwave", "icon": "🌈" } ] },
+      { "label": "🎨 Studio", "items": [
+        { "command": "uis.party", "title": "Party Mode" },
+        { "command": "uis.theme", "title": "Toggle Synthwave" },
+        { "command": "uis.mdcopy", "title": "Copy File as Markdown" }
+      ] }
+    ],
+    "keybindings": [
+      { "key": "Ctrl+Alt+S", "command": "uis.theme", "title": "Toggle Synthwave Theme" }
+    ],
+    "terminalCommands": {
+      "party": { "description": "celebrate", "output": "🎉 🎊 ✨ Party time!" },
+      "synthwave": { "description": "how to enable the theme", "output": "Press Ctrl+Alt+S or click the 🌈 status bar item." }
+    }
+  }
+}
