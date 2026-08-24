@@ -228,6 +228,29 @@
   .export-progress .task-summary .sum-label{color:var(--dim)}
   .icon-btn{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--inputBg);color:var(--fg);font-size:15px}
   .icon-btn:hover{background:var(--hoverStrong)}
+  /* Zen mode */
+  body.zen #activitybar,body.zen #sidebar,body.zen #tabs,body.zen #statusbar,body.zen #titlebar,body.zen #terminal,body.zen #term-resize{display:none!important}
+  /* Extension-contributed sidebar views */
+  .ext-view{padding:6px 2px;font-size:13px;color:var(--fg);line-height:1.5}
+  .ext-view h3{margin:6px 0 8px;font-size:14px}
+  .ext-view a{color:var(--accent)}
+  /* Media & preview viewers */
+  .viewer{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);overflow:auto;padding:22px}
+  .viewer .checker{background:repeating-conic-gradient(#262626 0% 25%, #303030 0% 50%) 50% / 18px 18px;border-radius:6px;padding:6px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .viewer img{display:block;max-width:100%;border-radius:4px}
+  .viewer .vmeta{color:var(--dim);font-size:12px;text-align:center}
+  .viewer .vbig{font-size:64px;line-height:1}
+  .viewer audio{width:min(520px,90%)}
+  .viewer video{max-width:92%;max-height:70vh;border-radius:6px;background:#000;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .viewer .vtools{display:flex;gap:6px;align-items:center}
+  .viewer .vtools .vzoom{min-width:52px;text-align:center;color:var(--dim);font-size:12px}
+  .preview-wrap{height:100%;display:flex;flex-direction:column;min-height:0}
+  .preview-bar{display:flex;gap:6px;padding:5px 10px;background:var(--sidebar);border-bottom:1px solid var(--border);align-items:center;font-size:12px;flex-shrink:0}
+  .preview-bar .ptitle{color:var(--dim);margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .seg{display:flex;border:1px solid var(--inputBorder);border-radius:6px;overflow:hidden}
+  .seg button{padding:4px 12px;font-size:12px;color:var(--dim);background:transparent}
+  .seg button.on{background:var(--accent);color:#fff}
+  .preview-frame{flex:1;border:none;width:100%;background:#fff;min-height:0}
 </style>
 </head>
 <body>
@@ -235,7 +258,7 @@
 
   <!-- TITLE BAR -->
   <div id="titlebar">
-    <div class="brand"><span class="logo">🚫</span><span>Ban Code</span><span style="color:var(--dim)">—</span><span id="docname">Welcome</span></div>
+    <div class="brand"><span class="logo" id="brand-logo">🚫</span><span id="brand-name">Ban Code</span><span style="color:var(--dim)">—</span><span id="docname">Welcome</span></div>
     <div id="menubar"></div>
     <div id="winbtns"><span class="pillow" id="ext-count">🧩 0 ext</span></div>
   </div>
@@ -309,10 +332,41 @@ function sw(sel,cb){const el=$(sel);if(!el)return;el.onclick=()=>{el.classList.t
 
 /* ---------- languages ---------- */
 const LANG_MAP={js:'javascript',jsx:'javascript',mjs:'javascript',cjs:'javascript',ts:'typescript',tsx:'typescript',mts:'typescript',py:'python',pyw:'python',rb:'ruby',go:'go',rs:'rust',java:'java',c:'c',h:'c',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',cs:'csharp',php:'php',swift:'swift',kt:'kotlin',html:'html',htm:'html',css:'css',scss:'scss',less:'less',sass:'scss',json:'json',jsonc:'json',yaml:'yaml',yml:'yaml',xml:'xml',svg:'xml',md:'markdown',markdown:'markdown',sh:'shell',bash:'shell',zsh:'shell',sql:'sql',ini:'ini',toml:'ini',conf:'ini',txt:'plaintext',vue:'html',svelte:'html',lua:'lua',r:'r',dart:'dart',fs:'fsharp',pl:'perl'};
-function langFromName(name){const e=name.includes('.')?name.split('.').pop().toLowerCase():'';return LANG_MAP[e]||'plaintext';}
-function fileIcon(name){const e=name.split('.').pop().toLowerCase();const m={js:'🟨',jsx:'🟨',ts:'🟦',tsx:'🟦',py:'🐍',json:'🧾',html:'🟧',css:'🎨',scss:'🎨',md:'📄',java:'☕',go:'🐹',rs:'🦀',c:'🔵',cpp:'➕',csharp:'💠',php:'🐘',sh:'🐚',sql:'🗄️',yaml:'⚙️',xml:'🧩',svg:'🖼️',txt:'📃',lock:'🔒',png:'🖼️',jpg:'🖼️',gif:'🖼️',webp:'🖼️',pdf:'📕',zip:'🗜️'};return m[e]||'📄';}
+const _extLangMap={},_extFileIcons={}; // filled by extension "languages" & "fileIcons" contributions
+function langFromName(name){const e=name.includes('.')?name.split('.').pop().toLowerCase():'';return _extLangMap[e]||LANG_MAP[e]||'plaintext';}
+function fileIcon(name){const e=name.split('.').pop().toLowerCase();if(_extFileIcons[e])return _extFileIcons[e];const m={js:'🟨',jsx:'🟨',ts:'🟦',tsx:'🟦',py:'🐍',json:'🧾',html:'🟧',css:'🎨',scss:'🎨',md:'📄',java:'☕',go:'🐹',rs:'🦀',c:'🔵',cpp:'➕',csharp:'💠',php:'🐘',sh:'🐚',sql:'🗄️',yaml:'⚙️',xml:'🧩',svg:'🖼️',txt:'📃',lock:'🔒',png:'🖼️',jpg:'🖼️',gif:'🖼️',webp:'🖼️',pdf:'📕',zip:'🗜️'};return m[e]||'📄';}
+
+/* ---------- binary/media files (image & audio/video viewers) ---------- */
+function extOf(name){return name.includes('.')?name.split('.').pop().toLowerCase():'';}
+const IMAGE_EXTS=new Set(['png','jpg','jpeg','gif','webp','bmp','ico','cur','avif','svg']);
+const AUDIO_EXTS=new Set(['mp3','wav','ogg','oga','m4a','flac','aac','opus','weba']);
+const VIDEO_EXTS=new Set(['mp4','m4v','webm','mov','mkv']);
+const MIME_BY_EXT={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',bmp:'image/bmp',ico:'image/x-icon',cur:'image/x-icon',avif:'image/avif',svg:'image/svg+xml',mp3:'audio/mpeg',wav:'audio/wave',ogg:'audio/ogg',oga:'audio/ogg',m4a:'audio/mp4',flac:'audio/flac',aac:'audio/aac',opus:'audio/opus',weba:'audio/webm',mp4:'video/mp4',m4v:'video/mp4',webm:'video/webm',mov:'video/quicktime',mkv:'video/x-matroska'};
+function mediaKindOf(name){const e=extOf(name);if(IMAGE_EXTS.has(e))return'image';if(AUDIO_EXTS.has(e))return'audio';if(VIDEO_EXTS.has(e))return'video';return null;}
+/* Read any file: media types become data URLs so they can be viewed, everything else stays text */
+async function readFileSmart(file,nameHint){
+  nameHint=nameHint||file.name;
+  const kind=mediaKindOf(nameHint);
+  if(kind&&extOf(nameHint)!=='svg'){ // svg stays editable text
+    try{
+      const dataUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+      return {content:String(dataUrl),binary:true,mime:MIME_BY_EXT[extOf(nameHint)]||file.type||'application/octet-stream'};
+    }catch(e){/* fall through to text */}
+  }
+  const content=await file.text();
+  return {content,binary:false,mime:''};
+}
+/* Best <img>/<audio>/<video> source for a node (data URL, or svg text wrapped) */
+function mediaSrcFor(node){
+  const c=node.content||'';
+  if(c.startsWith('data:'))return c;
+  if(extOf(node.name)==='svg')return 'data:image/svg+xml;utf8,'+encodeURIComponent(c);
+  return '';
+}
 
 /* ---------- state ---------- */
+const DEFAULT_SETTINGS={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth',
+  autoSave:true,restoreSession:true,ligatures:true,lineHeight:0,indentGuides:true,stickyScroll:false,smoothCaret:true,renderWhitespace:'selection',zenMode:false};
 const state={
   fileList:[], openFiles:[], activeFileId:null,
   activityView:'explorer', sidebarVisible:true,
@@ -320,9 +374,12 @@ const state={
   searchQuery:'',
   extensions:[],
   projectJson:null, projectDirty:false,
-  settings:LS.get('settings',{ theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth' }),
+  settings:Object.assign({},DEFAULT_SETTINGS,LS.get('settings',{})),
   monaco:null, monacoReady:false, editor:null,
   paletteMode:'cmd', paletteItems:[], paletteSel:0,
+  cursor:{line:1,col:1,selChars:0},
+  uiOverride:{}, lazyImport:false,
+  viewMode:'', viewFileId:'', previewMode:{},
 };
 function persist(){LS.set('settings',state.settings);LS.set('extensions',state.extensions);}
 const persistSettings=()=>LS.set('settings',state.settings);
@@ -355,22 +412,31 @@ function createFolder(name,parentId,noRender){
   const node={id:uid(),name,type:'folder',isOpen:true,children:[],path:(parent&&parent.type==='folder'?(parent.path?(parent.path+'/'):''):'')+name};
   if(parent&&parent.type==='folder')parent.children.push(node);else state.fileList.push(node);
   state.projectDirty=true;if(!noRender){renderExplorer();renderStatusbar();}return node;}
-function openNode(node){
+function openNode(node,opts){
   if(node.type!=='file')return;
   let of=state.openFiles.find(f=>f.id===node.id);
-  if(!of){of={id:node.id,name:node.name,content:node.content||'',language:node.language||'plaintext',path:node.path||node.name,modified:false};state.openFiles.push(of);}
+  if(!of){of={id:node.id,name:node.name,content:node.content||'',language:node.language||'plaintext',path:node.path||node.name,modified:false,binary:!!node.binary,mime:node.mime||''};state.openFiles.push(of);}
   state.activeFileId=node.id;
   renderTabs();renderEditor();renderStatusbar();setDocName(node.name);
+  if(opts&&opts.line&&state.monacoReady)setTimeout(()=>jumpToLine(opts.line,opts.query),80);
   // Lazy load content from stored file/entry reference (for large project imports)
   if(!node.content&&node.path){
+    const apply=(rd)=>{applyLazyContent(node,rd);};
     if(_pendingFileRefs.has(node.path)){
       const file=_pendingFileRefs.get(node.path);_pendingFileRefs.delete(node.path);
-      file.text().then(content=>{node.content=content;const f=state.openFiles.find(x=>x.id===node.id);if(f){f.content=content;if(state.activeFileId===node.id){const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(f.path||f.name));const m=monaco.editor.getModel(uri);if(m)m.setValue(content);else renderEditor();}}}).catch(()=>{});
+      readFileSmart(file,node.name).then(apply).catch(()=>{});
     }else if(_pendingEntryRefs.has(node.path)){
       const entry=_pendingEntryRefs.get(node.path);_pendingEntryRefs.delete(node.path);
-      entry.file(file=>{if(file.size>_MAX_FILE_SIZE)return;file.text().then(content=>{node.content=content;const f=state.openFiles.find(x=>x.id===node.id);if(f){f.content=content;if(state.activeFileId===node.id){const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(f.path||f.name));const m=monaco.editor.getModel(uri);if(m)m.setValue(content);else renderEditor();}}}).catch(()=>{});});
+      entry.file(file=>{readFileSmart(file,node.name).then(apply).catch(()=>{});},()=>{});
     }
   }
+}
+function applyLazyContent(node,rd){
+  node.content=rd.content;
+  if(rd.binary){node.binary=true;node.mime=rd.mime;}
+  const f=state.openFiles.find(x=>x.id===node.id);
+  if(f){f.content=rd.content;f.binary=node.binary;f.mime=node.mime;}
+  if(state.activeFileId===node.id)renderEditor(); // re-render in the right mode (viewer/code)
 }
 function closeFile(id){
   const idx=state.openFiles.findIndex(f=>f.id===id);
@@ -384,6 +450,8 @@ function updateDocContent(id,content){
   // sync into project tree
   const node=findNode(state.fileList,id);
   if(node)node.content=content;
+  // live-refresh HTML preview if visible
+  if(state.viewMode==='htmlprev')schedulePreviewRefresh();
 }
 function currentOpen(){return state.openFiles.find(f=>f.id===state.activeFileId)||null;}
 function setDocName(n){$('#docname').textContent=n||'Welcome';}
@@ -392,7 +460,7 @@ function setDocName(n){$('#docname').textContent=n||'Welcome';}
 function renderWelcome(){
   const w=$('#welcome');if(!w)return;
   w.innerHTML='<div style="font-size:60px">🚫</div>'
-    +'<h1>Welcome to Ban Code</h1><div class="sub">A lightweight, extension-powered code editor</div>'
+    +'<h1>Welcome to Ban Code</h1><div class="sub">A lightweight, extension-powered code editor — v3.0</div>'
     +'<div class="actions">'
     +'<button class="btn primary" onclick="ui.newProject()">🆕 New Project</button>'
     +'<button class="btn" onclick="ui.loadProjectJson()">📂 Open JSON</button>'
@@ -403,11 +471,13 @@ function renderWelcome(){
     +'<div class="kbd"><span>💾</span><div><span class="k">Ctrl+S</span><div class="muted">Save file</div></div></div>'
     +'<div class="kbd"><span>🧩</span><div><span class="k">Ctrl+Shift+P</span><div class="muted">Command Palette</div></div></div>'
     +'<div class="kbd"><span>⚡</span><div><span class="k">Ctrl+`</span><div class="muted">Toggle Terminal</div></div></div>'
-    +'<div class="kbd"><span>🆕</span><div><span class="k">Ctrl+N</span><div class="muted">New Project</div></div></div>'
-    +'<div class="kbd"><span>🔍</span><div><span class="k">Ctrl+Shift+F</span><div class="muted">Search</div></div></div>'
     +'<div class="kbd"><span>📜</span><div><span class="k">Ctrl+P</span><div class="muted">Quick Open</div></div></div>'
+    +'<div class="kbd"><span>🔍</span><div><span class="k">Ctrl+Shift+F</span><div class="muted">Search everywhere</div></div></div>'
+    +'<div class="kbd"><span>🧘</span><div><span class="k">Ctrl+Alt+Z</span><div class="muted">Zen Mode</div></div></div>'
+    +'<div class="kbd"><span>🖱️</span><div><span class="k">Middle-click tab</span><div class="muted">Close tab · right-click for menu</div></div></div>'
+    +'<div class="kbd"><span>☁️</span><div><span class="k">Auto-save</span><div class="muted">Workspace restores on reload</div></div></div>'
     +'</div>'
-    +'<div class="foot">Built with Monaco Editor · Extensions are plain .json files you drop in 🧩<br>'
+    +'<div class="foot">Extensions can restyle the whole UI — colors, corners, fonts, custom side panels,<br>status bar &amp; menu items 🎨 — and even run JavaScript via the <b>ban</b> API.<br>'
     +'Installed extensions: <b id="wfec">0</b></div>';
   const wf=$('#wfec');if(wf)wf.textContent=state.extensions.length;
 }
@@ -430,6 +500,25 @@ document.addEventListener('click',e=>{
   const tab=e.target.closest('.tab');
   if(tab&&!e.target.closest('.close')){state.activeFileId=tab.getAttribute('data-id');renderTabs();renderEditor();renderStatusbar();}
 });
+/* Tab middle-click close + right-click tab menu */
+$('#tabs').addEventListener('auxclick',e=>{if(e.button===1){const tab=e.target.closest('.tab');if(tab){e.preventDefault();closeFile(tab.getAttribute('data-id'));}}});
+$('#tabs').addEventListener('contextmenu',e=>{const tab=e.target.closest('.tab');if(!tab)return;e.preventDefault();showTabCtxMenu(e.clientX,e.clientY,tab.getAttribute('data-id'));});
+function showTabCtxMenu(x,y,id){
+  const f=state.openFiles.find(o=>o.id===id);
+  let h='<div class="ctx-label">Editor Tab</div>'
+    +'<div class="ctx-item" onclick="ctxTab(\''+id+'\',\'close\')">✕ Close</div>'
+    +'<div class="ctx-item" onclick="ctxTab(\''+id+'\',\'others\')">⧉ Close Others</div>'
+    +'<div class="ctx-item" onclick="ctxTab(null,\'all\')">🗙 Close All</div>';
+  if(f)h+='<div class="ctx-sep"></div><div class="ctx-item" onclick="ctxTab(\''+id+'\',\'path\')">🔗 Copy Path</div>';
+  openCtxMenuAt(x,y,h);
+}
+window.ctxTab=(id,op)=>{
+  if(op==='close'&&id)closeFile(id);
+  else if(op==='others'&&id)state.openFiles.filter(o=>o.id!==id).slice().forEach(o=>closeFile(o.id));
+  else if(op==='all')state.openFiles.slice().forEach(o=>closeFile(o.id));
+  else if(op==='path'&&id){const o=state.openFiles.find(z=>z.id===id);if(o)navigator.clipboard.writeText(o.path||o.name).then(()=>toast('Path copied','success',1400)).catch(()=>{});}
+  hideCtxMenu();
+};
 
 /* ---------- explorer ---------- */
 const _TREE_BUDGET=5000;
@@ -562,20 +651,52 @@ function defineBaseThemes(){
   monaco.editor.defineTheme('ban-light',{base:'vs',inherit:true,rules:[],colors:{'editor.background':'#ffffff','editor.foreground':'#000000'}});
   monaco.editor.defineTheme('ban-hc',{base:'hc-black',inherit:true,rules:[],colors:{'editor.background':'#000000'}});
 }
+/* ---------- editor view modes: code | image | audio | video | htmlcode | htmlprev ---------- */
+function computeViewMode(file){
+  const kind=mediaKindOf(file.name);
+  if(kind==='image')return'image';
+  if(kind==='audio')return'audio';
+  if(kind==='video')return'video';
+  const e=extOf(file.name);
+  if(e==='html'||e==='htm')return state.previewMode[file.id]?'htmlprev':'htmlcode';
+  return'code';
+}
+function disposeEditor(){if(state.editor){try{state.editor.dispose();}catch(e){}state.editor=null;}}
 function renderEditor(){
   const host=$('#editor');if(!host)return;
   const file=currentOpen();
   if(!state.monacoReady){return;}
   if(!file){
-    if(state.editor){state.editor.dispose();state.editor=null;}
+    disposeEditor();
+    state.viewMode='';state.viewFileId='';
     host.innerHTML='<div class="welcome" id="welcome"></div>';
     renderWelcome();return;
   }
-  if(!state.editor){
+  const mode=computeViewMode(file);
+  const viewerMode=(mode==='image'||mode==='audio'||mode==='video'||mode==='htmlprev');
+  /* rebuild when the mode changes, or when switching between two files in a viewer mode */
+  if(mode!==state.viewMode||(viewerMode&&file.id!==state.viewFileId)){
+    disposeEditor();
+    state.viewMode=mode;state.viewFileId=file.id;
     host.innerHTML='';
-    state.editor=monaco.editor.create(host,{value:'',language:file.language,theme:'ban-dark',automaticLayout:true,fontFamily:MONO,fontLigatures:true,padding:{top:14,bottom:14}});
+    if(mode==='image'){renderImageViewer(host,file);return;}
+    if(mode==='audio'){renderAudioViewer(host,file);return;}
+    if(mode==='video'){renderVideoViewer(host,file);return;}
+    if(mode==='htmlprev'){renderHtmlShell(host,file,true);return;}
+    if(mode==='htmlcode'){renderHtmlShell(host,file,false);}
+    else{host.innerHTML='<div id="ed-host" style="height:100%"></div>';}
+  }
+  state.viewFileId=file.id;
+  createOrShowEditor($('#ed-host'));
+}
+function createOrShowEditor(mount){
+  if(!mount)return;
+  const file=currentOpen();if(!file)return;
+  if(!state.editor){
+    state.editor=monaco.editor.create(mount,{value:'',language:file.language,theme:'ban-dark',automaticLayout:true,fontFamily:MONO,fontLigatures:true,padding:{top:14,bottom:14}});
     state.editor.onDidChangeModelContent(()=>{const cur=currentOpen();if(cur)updateDocContent(cur.id,state.editor.getValue());});
-    state.editor.onDidChangeCursorPosition(()=>renderStatusbar());
+    state.editor.onDidChangeCursorPosition(()=>scheduleStatusRender());
+    state.editor.onDidChangeCursorSelection(()=>scheduleStatusRender());
   }
   applyEditorSettings();
   const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(file.path||file.name));
@@ -584,40 +705,212 @@ function renderEditor(){
   else {monaco.editor.setModelLanguage(m,file.language);}
   state.editor.setModel(m);
 }
-function applyEditorSettings(){
+
+/* ---------- HTML live preview ---------- */
+function renderHtmlShell(host,file,on){
+  const wrap=document.createElement('div');wrap.className='preview-wrap';
+  wrap.innerHTML='<div class="preview-bar">'
+    +'<span class="ptitle">'+fileIcon(file.name)+' '+esc(file.path||file.name)+'</span>'
+    +'<div class="seg"><button id="pb-code" class="'+(on?'':'on')+'">Code</button><button id="pb-prev" class="'+(on?'on':'')+'">Preview</button></div>'
+    +'<button class="btn sm" id="pb-open">↗ Browser</button></div>'
+    +(on?'<iframe id="html-frame" class="preview-frame" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>'
+        :'<div style="flex:1;min-height:0"><div id="ed-host" style="height:100%"></div></div>');
+  host.appendChild(wrap);
+  $('#pb-code').onclick=()=>setHtmlPreview(false);
+  $('#pb-prev').onclick=()=>setHtmlPreview(true);
+  $('#pb-open').onclick=()=>openFileExternally(file);
+  if(on){const fr=$('#html-frame');if(fr)fr.srcdoc=file.content||'';}
+}
+function setHtmlPreview(on){
+  const f=currentOpen();if(!f)return;
+  state.previewMode[f.id]=!!on;
+  renderEditor();
+}
+window.toggleHtmlPreview=function(){
+  const f=currentOpen();if(!f)return toast('Open a file first','info');
+  const e=extOf(f.name);
+  if(e!=='html'&&e!=='htm')return toast('HTML preview works on .html / .htm files','info');
+  setHtmlPreview(!state.previewMode[f.id]);
+};
+let _pvTimer=null;
+function schedulePreviewRefresh(){
+  clearTimeout(_pvTimer);
+  _pvTimer=setTimeout(()=>{
+    const fr=$('#html-frame');const f=currentOpen();
+    if(fr&&f&&state.viewMode==='htmlprev')fr.srcdoc=f.content||'';
+  },400);
+}
+function openFileExternally(file){
+  try{
+    const c=file.content||'';
+    let url;
+    if(c.startsWith('data:'))url=c;
+    else{
+      const mime=MIME_BY_EXT[extOf(file.name)]||'text/html';
+      url=URL.createObjectURL(new Blob([c],{type:mime}));
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }
+    window.open(url,'_blank');
+  }catch(e){toast('Could not open externally','error');}
+}
+
+/* ---------- image / audio / video viewers ---------- */
+let _imgZoom=null; // null = fit to width
+function renderImageViewer(host,file){
+  const src=mediaSrcFor(file);
+  const wrap=document.createElement('div');wrap.className='viewer';
+  if(!src){
+    wrap.innerHTML='<div class="vbig">🖼️</div><div class="vmeta">'+esc(file.name)+'<br>Binary content not loaded yet.</div>';
+  }else{
+    wrap.innerHTML='<div class="vtools">'
+      +'<button class="btn sm" id="iv-out">－</button><span class="vzoom" id="iv-zoom">Fit</span><button class="btn sm" id="iv-in">＋</button>'
+      +'<button class="btn sm" id="iv-fit">Fit</button><button class="btn sm" id="iv-rot">⟲ Rotate</button><button class="btn sm" id="iv-open">↗ Open</button></div>'
+      +'<div class="checker"><img id="iv-img" alt="'+esc(file.name)+'"></div>'
+      +'<div class="vmeta" id="iv-meta">'+esc(file.name)+'</div>';
+    const img=wrap.querySelector('#iv-img');
+    let rot=0;
+    const applyZoom=()=>{
+      const z=$('#iv-zoom');
+      if(_imgZoom==null){img.style.width='';img.style.maxWidth='100%';img.style.maxHeight='68vh';if(z)z.textContent='Fit';}
+      else{img.style.maxWidth='none';img.style.maxHeight='none';img.style.width=Math.round((img.naturalWidth||600)*_imgZoom/100)+'px';if(z)z.textContent=_imgZoom+'%';}
+    };
+    img.onload=()=>{
+      const meta=$('#iv-meta');
+      if(meta)meta.textContent=file.name+' — '+img.naturalWidth+'×'+img.naturalHeight+' px';
+      img.style.transform=rot?('rotate('+rot+'deg)'):'';
+      applyZoom();
+    };
+    img.src=src;
+    wrap.querySelector('#iv-in').onclick=()=>{_imgZoom=Math.min(800,(_imgZoom||100)+25);applyZoom();};
+    wrap.querySelector('#iv-out').onclick=()=>{_imgZoom=Math.max(10,(_imgZoom||100)-25);applyZoom();};
+    wrap.querySelector('#iv-fit').onclick=()=>{_imgZoom=null;applyZoom();};
+    wrap.querySelector('#iv-rot').onclick=()=>{rot=(rot+90)%360;img.style.transform=rot?('rotate('+rot+'deg)'):'';};
+    wrap.querySelector('#iv-open').onclick=()=>openFileExternally(file);
+  }
+  host.appendChild(wrap);
+}
+function renderAudioViewer(host,file){
+  const src=mediaSrcFor(file);
+  const wrap=document.createElement('div');wrap.className='viewer';
+  wrap.innerHTML='<div class="vbig">🎵</div>'
+    +'<div class="vmeta" style="font-size:14px;color:var(--fg)">'+esc(file.name)+'</div>'
+    +(src?'<audio controls src="'+esc(src)+'"></audio>':'<div class="vmeta">Binary content not loaded yet.</div>')
+    +'<div class="vtools"><button class="btn sm" id="au-open">↗ Open in Browser</button></div>';
+  host.appendChild(wrap);
+  const b=wrap.querySelector('#au-open');if(b)b.onclick=()=>openFileExternally(file);
+}
+function renderVideoViewer(host,file){
+  const src=mediaSrcFor(file);
+  const wrap=document.createElement('div');wrap.className='viewer';
+  wrap.innerHTML='<div class="vmeta" style="font-size:14px;color:var(--fg)">🎬 '+esc(file.name)+'</div>'
+    +(src?'<video controls src="'+esc(src)+'"></video>':'<div class="vmeta">Binary content not loaded yet.</div>')
+    +'<div class="vtools"><button class="btn sm" id="vi-open">↗ Open in Browser</button></div>';
+  host.appendChild(wrap);
+  const b=wrap.querySelector('#vi-open');if(b)b.onclick=()=>openFileExternally(file);
+}
+let _srPending=false;
+function scheduleStatusRender(){if(_srPending)return;_srPending=true;requestAnimationFrame(()=>{_srPending=false;updateCursorState();renderStatusbar();});}
+function updateCursorState(){
+  if(!state.editor){state.cursor={line:1,col:1,selChars:0};return;}
+  const pos=state.editor.getPosition();const sel=state.editor.getSelection();
+  let selChars=0;if(sel&&!sel.isEmpty()){try{selChars=state.editor.getModel().getValueInRange(sel).length;}catch(e){}}
+  state.cursor={line:pos?pos.lineNumber:1,col:pos?pos.column:1,selChars};
+}
+function jumpToLine(line,q){
   if(!state.editor)return;
-  state.editor.updateOptions({fontSize:state.settings.fontSize,tabSize:state.settings.tabSize,
-    wordWrap:state.settings.wordWrap?'on':'off',minimap:{enabled:state.settings.minimap},
-    lineNumbers:state.settings.lineNumbers?'on':'off',
-    bracketPairColorization:{enabled:state.settings.bracketPairColorization},
-    cursorBlinking:state.settings.cursorBlinking,fontFamily:MONO,fontLigatures:true,smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:'selection'});
+  const ed=state.editor;
+  ed.revealLineInCenter(line);ed.setPosition({lineNumber:line,column:1});ed.focus();
+  if(q){try{const m=ed.getModel();const lw=m.getLineContent(line)||'';const idx=lw.toLowerCase().indexOf(String(q).toLowerCase());if(idx>=0)ed.setSelection({startLineNumber:line,endLineNumber:line,startColumn:idx+1,endColumn:idx+1+String(q).length});}catch(e){}}
+}
+function applyEditorSettings(){
+  if(!state.editor)return;const s=state.settings;
+  state.editor.updateOptions({fontSize:s.fontSize,tabSize:s.tabSize,
+    wordWrap:s.wordWrap?'on':'off',minimap:{enabled:s.minimap},
+    lineNumbers:s.lineNumbers?'on':'off',
+    bracketPairColorization:{enabled:s.bracketPairColorization},
+    cursorBlinking:s.cursorBlinking,
+    cursorSmoothCaretAnimation:s.smoothCaret?'on':'off',
+    fontLigatures:!!s.ligatures,
+    lineHeight:+s.lineHeight||0,
+    guides:{indentation:!!s.indentGuides,bracketPairs:!!s.bracketPairColorization},
+    stickyScroll:{enabled:!!s.stickyScroll},
+    renderWhitespace:s.renderWhitespace||'selection',
+    fontFamily:MONO,smoothScrolling:true,scrollBeyondLastLine:false});
+}
+/* Zen mode */
+function toggleZen(){
+  const on=document.body.classList.toggle('zen');
+  state.settings.zenMode=on;persistSettings();
+  if(on)toast('Zen Mode — press Esc to exit','info',2200);
+  else{if(state.editor)state.editor.layout();}
+}
+/* ---------- chrome presets & extension UI theming ---------- */
+const CHROME_PRESETS={
+  dark:{'--bg':'#1e1e1e','--sidebar':'#252526','--activity':'#333333','--border':'#2a2a2a','--titlebar':'#252333','--accent':'#007acc','--fg':'#cccccc','--dim':'#858585','--muted':'#6b6b6b','--hover':'rgba(255,255,255,.06)','--hoverStrong':'rgba(255,255,255,.12)','--hoverBtn':'rgba(255,255,255,.16)','--card':'#2d2d2d','--cardBorder':'#3a3a3a','--inputBg':'#3c3c3c','--inputBorder':'#454545','--selectBg':'#094771','--scrollbar':'#424242','--scrollbarHover':'#4f4f4f','--termBg':'#161616','--termHead':'#2d2d2d'},
+  light:{'--bg':'#ffffff','--sidebar':'#f3f3f3','--activity':'#e8e8e8','--border':'#e0e0e0','--titlebar':'#e8e8ec','--accent':'#007acc','--fg':'#1e1e1e','--dim':'#6e6e6e','--muted':'#999999','--hover':'rgba(0,0,0,.06)','--hoverStrong':'rgba(0,0,0,.10)','--hoverBtn':'rgba(0,0,0,.14)','--card':'#f6f6f6','--cardBorder':'#d8d8d8','--inputBg':'#e8e8e8','--inputBorder':'#c8c8c8','--selectBg':'#094771','--scrollbar':'#c1c1c1','--scrollbarHover':'#a8a8a8','--termBg':'#f0f0f0','--termHead':'#e0e0e0'},
+  hc:{'--bg':'#000000','--sidebar':'#000000','--activity':'#000000','--border':'#6fc3df','--titlebar':'#000000','--accent':'#4fc1ff','--fg':'#ffffff','--dim':'#a9a9a9','--muted':'#888888'}
+};
+const UI_VAR_KEYS=['bg','sidebar','activity','border','titlebar','accent','fg','dim','muted','hover','hoverStrong','hoverBtn','card','cardBorder','inputBg','inputBorder','selectBg','scrollbar','scrollbarHover','termBg','termHead'];
+function prefixVars(o){
+  const out={};Object.entries(o||{}).forEach(([k,v])=>{
+    const bare=String(k).replace(/^--/,'');
+    if(UI_VAR_KEYS.includes(bare))out['--'+bare]=v;
+  });return out;
+}
+/* Track inline CSS custom properties we put on :root so a theme switch can fully undo the previous one */
+let _appliedVars=new Set();
+function clearAppliedVars(){
+  const r=document.documentElement.style;
+  _appliedVars.forEach(k=>{try{r.removeProperty(k);}catch(e){}});
+  _appliedVars.clear();
+}
+function setRootVars(map){
+  const r=document.documentElement.style;
+  Object.entries(map).forEach(([k,v])=>{r.setProperty(k,String(v));_appliedVars.add(k);});
+}
+function computeMergedUI(){
+  const m={};state.extensions.forEach(x=>{const u=x.contributes&&x.contributes.ui;if(u&&typeof u==='object')Object.assign(m,u);});return m;
+}
+const HIDE_SELECTORS={statusbar:'#statusbar',activitybar:'#activitybar',tabs:'#tabs',titlebar:'#titlebar',sidebar:'#sidebar',terminal:'#terminal',docname:'#docname',minimap:'.monaco-editor .minimap'};
+function applyUIExtensions(){
+  const u=computeMergedUI();state.uiOverride=u;
+  const logo=$('#brand-logo'),bn=$('#brand-name');
+  if(logo)logo.textContent=u.logo||'🚫';
+  if(bn)bn.textContent=u.brandName||'Ban Code';
+  document.title=(u.brandName||'Ban Code')+(u.brandTag?' — '+u.brandTag:' — Extension-Powered Editor');
+  const prev=$('#ext-ui-style');if(prev)prev.remove();
+  const bits=[];
+  if(u.radius)bits.push('.btn,.ext-card,.modal,.dropdown,.palette,.dropzone,.toast,.ctx-menu,.import-progress,.export-progress,.task-summary{border-radius:'+(+u.radius||8)+'px}');
+  if(u.fontFamily)bits.push('body,button,input,select,textarea{font-family:'+String(u.fontFamily)+'}');
+  if(Array.isArray(u.hide))u.hide.forEach(h=>{const sel=HIDE_SELECTORS[h];if(sel)bits.push(sel+'{display:none!important}');});
+  if(u.css)bits.push(String(u.css));
+  if(bits.length){const st=document.createElement('style');st.id='ext-ui-style';st.textContent=bits.join('\n');document.head.appendChild(st);}
+  applyTheme(state.settings.theme);
 }
 function applyTheme(id){
   if(!id)return;
   if(id==='light')id='ban-light';if(id==='dark')id='ban-dark';
-  // Update CSS variables for page chrome
-  const isLight=(id==='ban-light');
-  const isHC=(id==='ban-hc');
-  const r=document.documentElement.style;
-  if(isLight){
-    r.setProperty('--bg','#ffffff');r.setProperty('--sidebar','#f3f3f3');r.setProperty('--activity','#e8e8e8');
-    r.setProperty('--border','#e0e0e0');r.setProperty('--titlebar','#e8e8ec');r.setProperty('--accent','#007acc');
-    r.setProperty('--fg','#1e1e1e');r.setProperty('--dim','#6e6e6e');r.setProperty('--muted','#999999');
-    r.setProperty('--hover','rgba(0,0,0,.06)');r.setProperty('--hoverStrong','rgba(0,0,0,.10)');r.setProperty('--hoverBtn','rgba(0,0,0,.14)');
-    r.setProperty('--card','#f6f6f6');r.setProperty('--cardBorder','#d8d8d8');r.setProperty('--inputBg','#e8e8e8');r.setProperty('--inputBorder','#c8c8c8');
-    r.setProperty('--selectBg','#094771');r.setProperty('--scrollbar','#c1c1c1');r.setProperty('--scrollbarHover','#a8a8a8');
-    r.setProperty('--termBg','#f0f0f0');r.setProperty('--termHead','#e0e0e0');
-  } else if(isHC){
-    r.setProperty('--bg','#000000');r.setProperty('--sidebar','#000000');r.setProperty('--activity','#000000');
-    r.setProperty('--border','#6fc3df');r.setProperty('--titlebar','#000000');r.setProperty('--accent','#4fc1ff');
-    r.setProperty('--fg','#ffffff');r.setProperty('--dim','#a9a9a9');r.setProperty('--muted','#888888');
-  } else {
-    r.setProperty('--bg','#1e1e1e');r.setProperty('--sidebar','#252526');r.setProperty('--activity','#333333');
-    r.setProperty('--border','#2a2a2a');r.setProperty('--titlebar','#252333');r.setProperty('--accent','#007acc');
-    r.setProperty('--fg','#cccccc');r.setProperty('--dim','#858585');r.setProperty('--muted','#6b6b6b');
+  const isDefault=(id==='ban-dark'||id==='ban-light'||id==='ban-hc');
+  const isLight=(id==='ban-light'),isHC=(id==='ban-hc');
+  const preset=isLight?CHROME_PRESETS.light:isHC?CHROME_PRESETS.hc:CHROME_PRESETS.dark;
+  // 0) wipe every inline var from the previous theme so nothing leaks through
+  clearAppliedVars();
+  const root={};
+  // 1) base chrome by luminosity (hc preset is sparse - backfill the rest from dark)
+  Object.entries(preset).forEach(([k,v])=>root[k]=v);
+  if(isHC)Object.entries(CHROME_PRESETS.dark).forEach(([k,v])=>{if(!(k in root))root[k]=v;});
+  // 2) extension theme "chrome" overrides (page colors from a contributed theme)
+  const th=_themes[id];
+  if(th&&th.chrome)Object.entries(prefixVars(th.chrome)).forEach(([k,v])=>root[k]=v);
+  // 3) global extension ui color overlays only apply to contributed themes,
+  //    so picking a built-in theme always looks like the real built-in theme
+  if(!isDefault){
+    const ui=(state.uiOverride&&Object.keys(state.uiOverride).length)?state.uiOverride:computeMergedUI();
+    Object.entries(prefixVars(ui)).forEach(([k,v])=>root[k]=v);
   }
+  setRootVars(root);
   // Apply Monaco theme
-  if(state.monacoReady){monaco.editor.setTheme(_themes[id]?id:(id==='ban-light'?'ban-light':id==='ban-hc'?'ban-hc':'ban-dark'));}
+  if(state.monacoReady){monaco.editor.setTheme(isDefault?id:(_themes[id]?id:'ban-dark'));}
   state.settings.theme=id;
 }
 function setupCompletion(){
@@ -631,17 +924,40 @@ function setupCompletion(){
 }
 function insertAtCursor(text){
   const f=currentOpen();if(!f)return toast('Open a file first','info');
-  if(state.editor){const p=state.editor.getPosition();state.editor.executeEdits('extension',[{range:new monaco.Range(p.lineNumber,p.column,p.lineNumber,p.column),text:text}]);state.editor.focus();}
+  if(state.editor){
+    const sel=state.editor.getSelection();
+    const p=state.editor.getPosition();
+    const range=(sel&&!sel.isEmpty())?sel:new monaco.Range(p.lineNumber,p.column,p.lineNumber,p.column);
+    state.editor.executeEdits('extension',[{range:range,text:text}]);state.editor.focus();
+  }
 }
 
 /* ---------- status bar ---------- */
+function countWords(c){const t=(c||'').trim();return t?t.split(/\s+/).length:0;}
+function sbExtItem(i){
+  const cmd=i.command?esc(i.command):'';
+  return '<span class="sb" title="'+esc(i.tooltip)+'" '+(cmd?'onclick="runExtCommandById(\''+cmd+'\')"':'')+'>'+esc(i.text)+'</span>';
+}
 function renderStatusbar(){
   const f=currentOpen();
   const projName=state.fileList.length?esc(state.fileList[0].name):'';
-  $('#sb-left').innerHTML=(projName?'<span class="sb">'+projName+'</span>':'<span class="sb">No project</span>')+'<span class="sb" onclick="toggleTerminal()">⎇ main</span><span class="sb" onclick="toggleTerminal()">⧉ 0↓ 0↑</span><span class="sb" onclick="toggleTerminal()">⚑ 0</span>';
-  let r=f?'<span class="sb">Ln '+countLines(f.content)+'</span><span class="sb">Spaces: '+state.settings.tabSize+'</span><span class="sb">UTF-8</span><span class="sb" style="text-transform:uppercase">'+esc(f.language)+'</span>': '<span class="sb">Ready</span>';
-  if(f&&f.modified)r+='<span class="sb">[Modified]</span>';
-  r+='<span class="sb" onclick="toggleTerminal()">⌨</span><span class="sb" id="sbver">Ban Code v2.0</span>';
+  const cur=state.cursor||{line:1,col:1,selChars:0};
+  let left=(projName?'<span class="sb">'+projName+'</span>':'<span class="sb">No project</span>')
+    +'<span class="sb" onclick="toggleTerminal()" title="Branch">⎇ main</span>'
+    +'<span class="sb" title="Problems">✓ 0 ✗ 0</span>';
+  _extStatusBarItems.filter(i=>i.alignment==='left').forEach(i=>{left+=sbExtItem(i);});
+  $('#sb-left').innerHTML=left;
+  let r='';
+  if(f){
+    r+='<span class="sb">Ln '+cur.line+', Col '+cur.col+(cur.selChars?' ('+cur.selChars+' selected)':'')+'</span>';
+    if(!f.binary&&f.content&&f.content.length<100000)r+='<span class="sb" title="words · characters">'+countWords(f.content)+'w · '+f.content.length+'c</span>';
+    r+='<span class="sb" onclick="ui.exec(\'cycleTab\')" title="Click to cycle indent">Spaces: '+state.settings.tabSize+'</span>'
+      +'<span class="sb">UTF-8</span>'
+      +'<span class="sb" style="text-transform:uppercase">'+esc(f.language)+'</span>';
+    if(f.modified)r+='<span class="sb">● Unsaved</span>';
+  } else r='<span class="sb">Ready</span>';
+  _extStatusBarItems.filter(i=>i.alignment==='right').forEach(i=>{r+=sbExtItem(i);});
+  r+='<span class="sb" onclick="toggleTerminal()" title="Toggle Terminal">⌨</span><span class="sb" id="sbver">Ban Code v3.0</span>';
   $('#sb-right').innerHTML=r;
 }
 function countLines(c){return c?c.split('\n').length:1;}
@@ -665,23 +981,84 @@ function termKey(e){
   else if(e.key==='ArrowDown'){e.preventDefault();termState.hi=Math.max(termState.hi-1,-1);inp.value=termState.hi<0?'':termState.hist[termState.hist.length-1-termState.hi];}
   else if(e.key==='Tab'){e.preventDefault();const cmds=termCommands();const m=cmds.find(c=>c.startsWith(inp.value.toLowerCase()));if(m)inp.value=m;}
 }
-function termCommands(){const b=['help','clear','echo','date','ls','pwd','whoami','version','list-ext','theme'];state.extensions.forEach(x=>Object.keys(x.contributes&&x.contributes.terminalCommands||{}).forEach(c=>b.push(c)));return b;}
+function termCommands(){
+  const b=['help','clear','date','echo','ls','pwd','whoami','cat','touch','mkdir','rm','open','wc','grep','history','list-ext','extensions','theme','about','exit'];
+  state.extensions.forEach(x=>Object.keys(x.contributes&&x.contributes.terminalCommands||{}).forEach(c=>b.push(c)));
+  return b;
+}
 function runCommand(raw){
   const cmd=raw.trim(),low=cmd.toLowerCase();
   if(!cmd)return;
   switch(low){
-    case 'help':termLine('Available commands:','term-info');['help  - help','clear - clear','echo  - echo text','date  - date','ls - list workspace','pwd - cwd','whoami - user','list-ext / extensions - installed','theme - list themes'].forEach(c=>termLines('  '+c));break;
+    case 'help':{
+      termLines('Core commands:','term-info');
+      ['  help                 this help','  clear                clear screen','  echo <text>          print text','  date                 current date/time',
+       '  ls [dir]             list workspace / folder','  pwd                  working directory','  whoami               current user',
+       '  cat <file>           print a file (max 400 lines)','  touch <file>         create an empty file','  mkdir <dir>          create a folder',
+       '  rm <name>            delete a file/folder','  open <file>          open in editor','  wc <file>            line/word/char count',
+       '  grep <pattern>       search all files','  history              recent commands','  list-ext             installed extensions',
+       '  theme                list themes','  about                about Ban Code','  exit                 close terminal'].forEach(c=>termLines(c));
+      const exts=[];
+      state.extensions.forEach(x=>Object.entries(x.contributes&&x.contributes.terminalCommands||{}).forEach(([k,v])=>exts.push('  '+k+(v&&typeof v==='object'&&v.description?' — '+v.description:''))));
+      if(exts.length){termLines('Extension commands:','term-info');exts.forEach(c=>termLines(c));}
+      break;
+    }
     case 'clear':termState.lines=[];renderTerm();break;
     case 'date':termLines(new Date().toString());break;
     case 'pwd':termLines('/home/'+(state.fileList[0]&&state.fileList[0].name||'workspace'));break;
     case 'whoami':termLines('developer');break;
-    case 'ls':{const names=state.fileList.flatMap(n=>n.type==='folder'?(n.children||[]).map(c=>c.name+(c.type==='folder'?'/':'')):[n.name]);termLines(names.length?names.join('  '):'(empty workspace)');break;}
+    case 'about':termLines('🚫 Ban Code v3.0 — single-file editor with a JSON extension system','term-info');break;
+    case 'history':termState.hist.slice(-25).forEach((h,i)=>termLines('  '+(i+1)+'  '+h));break;
+    case 'ls':{
+      const arg=cmd.split(/\s+/)[1];
+      let kids=state.fileList;
+      if(arg){const base=findNodeByRef(arg,'folder');if(!base){termLines('ls: folder not found: '+arg,'term-error');break;}kids=base.children||[];}
+      else if(state.fileList.length)kids=state.fileList[0].children||state.fileList;
+      kids.length?kids.forEach(c=>termLines((c.type==='folder'?'📁 ':'📄 ')+c.name)):termLines('(empty)');
+      break;
+    }
     case 'list-ext':case 'extensions':state.extensions.length?state.extensions.forEach(x=>termLines('  • '+x.name+' v'+x.version+' — '+x.publisher,'term-info')):termLines('No extensions installed.','term-info');break;
-    case 'theme':termLines('Themes:','term-info');Object.keys(_themes).forEach(t=>termLines('  '+t));break;
+    case 'theme':termLines('Themes:','term-info');Object.keys(_themes).concat(['ban-dark','ban-light','ban-hc']).forEach(t=>termLines('  '+t));break;
     default:{
       if(low.startsWith('echo ')){termLines(cmd.slice(5));break;}
       if(low==='exit'){toggleTerminal();break;}
-      let h=false;state.extensions.forEach(x=>{const map=(x.contributes&&x.contributes.terminalCommands)||{};if(map[low]!==undefined){termLines(String(map[low]));h=true;}});
+      if(low.startsWith('cat ')||low.startsWith('type ')){
+        const nm=cmd.slice(low.startsWith('cat ')?4:5).trim();
+        const n=findNodeByRef(nm,'file');
+        if(!n)termLines('cat: no such file: '+nm,'term-error');
+        else if(n.binary)termLines('(binary file — '+((n.mime)||'media')+')','term-info');
+        else{const lines=(n.content||'').split('\n');lines.slice(0,400).forEach(l=>termLines(l));if(lines.length>400)termLines('... truncated ('+lines.length+' lines total)','term-info');}
+        break;
+      }
+      if(low.startsWith('touch ')){const nm=cmd.slice(6).trim();if(nm){createFile(nm,'',null,null,false);renderExplorer();renderStatusbar();termLines('created '+nm);}break;}
+      if(low.startsWith('mkdir ')){const nm=cmd.slice(6).trim();if(nm){createFolder(nm,null,false);renderExplorer();termLines('created folder '+nm+'/');}break;}
+      if(low.startsWith('rm ')){
+        const nm=cmd.slice(3).trim();const node=findNodeByRef(nm);
+        if(node){state.fileList=removeNode(state.fileList,node.id);closeFile(node.id);state.projectDirty=true;renderExplorer();renderStatusbar();termLines('removed '+nm);}
+        else termLines('rm: not found: '+nm,'term-error');
+        break;
+      }
+      if(low.startsWith('open ')){const n=findNodeByRef(cmd.slice(5).trim(),'file');if(n)openNode(n);else termLines('open: file not found','term-error');break;}
+      if(low.startsWith('wc ')){
+        const n=findNodeByRef(cmd.slice(3).trim(),'file');
+        if(!n)termLines('wc: no such file','term-error');
+        else{const c=n.content||'';const L=c.split('\n').length;const W=countWords(c);termLines(L+' lines  '+W+' words  '+c.length+' chars  '+n.name);}
+        break;
+      }
+      if(low.startsWith('grep ')){
+        const pat=cmd.slice(5).trim();
+        if(!pat){termLines('usage: grep <pattern>','term-info');break;}
+        const res=doSearch(pat).slice(0,40);
+        res.forEach(r2=>{const nd=findNode(state.fileList,r2.fileId);termLines((nd?nd.name:'?')+':'+r2.line+': '+r2.content);});
+        if(!res.length)termLines('no matches','term-info');else termLines('('+res.length+' match'+(res.length>1?'es':'')+')','term-info');
+        break;
+      }
+      let h=false;
+      state.extensions.forEach(x=>{
+        const map=(x.contributes&&x.contributes.terminalCommands)||{};
+        const v=map[low];
+        if(v!==undefined){h=true;termLines(typeof v==='object'&&v!==null?String(v.output??''):String(v));}
+      });
       if(h)break;
       termLines('Command not found: '+cmd+' — type "help".','term-error');
     }
@@ -715,8 +1092,16 @@ $('#t-min').onclick=()=>{$('#terminal').style.height='150px';_termHeight=150;};
 const ACTIVITIES=[{id:'explorer',icon:'🗂',label:'Explorer'},{id:'search',icon:'🔍',label:'Search'},{id:'extensions',icon:'🧩',label:'Extensions'},{id:'settings',icon:'⚙️',label:'Settings'}];
 function renderActivityBar(){
   $('#activitybar').innerHTML=ACTIVITIES.map(a=>'<div class="ab-wrap"><button class="act '+(state.activityView===a.id?'active':'')+'" data-a="'+a.id+'">'+a.icon+'</button><span class="act-tip">'+a.label+'</span></div>').join('')
+    +_extActivityButtons.map(b=>'<div class="ab-wrap"><button class="act '+(b.view&&state.activityView===b.view?'active':'')+'" data-extb="'+b.id+'">'+b.icon+'</button><span class="act-tip">'+esc(b.label||b.view||b.command)+'</span></div>').join('')
     +'<div class="spacer"></div><div class="ab-wrap"><button class="act" data-a="toggle">◧</button><span class="act-tip">Toggle Sidebar</span></div>';
   $$('#activitybar .act').forEach(b=>b.onclick=()=>{
+    const eb=b.getAttribute('data-extb');
+    if(eb){
+      const bt=_extActivityButtons.find(z=>z.id===eb);if(!bt)return;
+      if(bt.view&&(_extViewDefs.has(bt.view)||ACTIVITIES.some(a=>a.id===bt.view))){state.activityView=bt.view;state.sidebarVisible=true;}
+      else if(bt.command){runExtCommandById(bt.command);return;}
+      renderActivityBar();renderSidebar();return;
+    }
     const a=b.getAttribute('data-a');
     if(a==='toggle'){state.sidebarVisible=!state.sidebarVisible;renderSidebar();return;}
     state.activityView=a;if(!state.sidebarVisible)state.sidebarVisible=true;
@@ -733,11 +1118,16 @@ function renderSidebar(){
     case 'search':head.textContent='Search';renderSearch(body);break;
     case 'extensions':head.textContent='Extensions';renderExtensions(body);break;
     case 'settings':head.textContent='Settings';renderSettings(body);break;
+    default:{
+      const v=_extViewDefs.get(state.activityView);
+      if(v){head.textContent=v.icon+' '+v.title;body.innerHTML='<div class="ext-view">'+v.html+'</div>';}
+      else{state.activityView='explorer';renderSidebar();}
+    }
   }
 }
 
 /* ---------- search ---------- */
-function doSearch(q){const out=[];const walk=n=>{n.forEach(x=>{if(x.type==='file'&&x.content){try{x.content.split('\n').forEach((line,i)=>{if(line.toLowerCase().includes(q.toLowerCase()))out.push({fileId:x.id,line:i+1,content:line.trim()});});}catch(e){}}if(x.children)walk(x.children);});};walk(state.fileList);return out;}
+function doSearch(q){const out=[];const walk=n=>{n.forEach(x=>{if(x.type==='file'&&x.content&&!x.binary){try{x.content.split('\n').forEach((line,i)=>{if(line.toLowerCase().includes(q.toLowerCase()))out.push({fileId:x.id,line:i+1,content:line.trim()});});}catch(e){}}if(x.children)walk(x.children);});};walk(state.fileList);return out;}
 function escRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function mark(text,q){if(!q.trim())return esc(text);return esc(text).replace(new RegExp('('+escRegex(q)+')','gi'),'<mark class="mark">$1</mark>');}
 function renderSearch(body){
@@ -747,8 +1137,8 @@ function renderSearch(body){
     const by={};res.forEach(r=>{(by[r.fileId]=by[r.fileId]||[]).push(r);});
     box.innerHTML=Object.entries(by).map(([id,rs])=>{const node=findNode(state.fileList,id);const nm=node?node.name:'?';
       return '<div style="margin-bottom:4px"><div style="padding:3px 6px;color:var(--fg);font-size:12px">'+fileIcon(nm)+' '+esc(nm)+' <span class="pillow">'+rs.length+'</span></div>'
-        +rs.map(r=>'<div class="srch-res-line" data-go="'+id+'"><span class="ln">:'+r.line+'</span><code>'+mark(r.content,q)+'</code></div>').join('')+'</div>';}).join('');
-    $$('#srch-res [data-go]').forEach(el=>el.onclick=()=>{const n=findNode(state.fileList,el.getAttribute('data-go'));if(n)openNode(n);});
+        +rs.map(r=>'<div class="srch-res-line" data-go="'+id+'" data-line="'+r.line+'" data-q="'+esc(q)+'"><span class="ln">:'+r.line+'</span><code>'+mark(r.content,q)+'</code></div>').join('')+'</div>';}).join('');
+    $$('#srch-res [data-go]').forEach(el=>el.onclick=()=>{const n=findNode(state.fileList,el.getAttribute('data-go'));if(n)openNode(n,{line:+el.getAttribute('data-line'),query:el.getAttribute('data-q')});});
   };
   inp.addEventListener('input',run);run();
 }
@@ -763,6 +1153,100 @@ let _snippets={};
 function registerExtensionSnippets(ext){const sn=ext.contributes&&ext.contributes.snippets||{};Object.entries(sn).forEach(([lang,arr])=>{arr=Array.isArray(arr)?arr:[];arr.forEach(s=>{(_snippets[lang]=_snippets[lang]||[]).push({label:s.label||s.prefix,prefix:s.prefix,body:Array.isArray(s.body)?s.body:[String(s.body)],description:s.description||''});});});}
 function rebuildSnippets(){_snippets={};state.extensions.forEach(registerExtensionSnippets);}
 
+/* ---------- advanced extension runtime ----------
+   Contribution points: ui, statusBarItems, activityBarButtons, views, menus,
+   languages, fileIcons, settingsDefaults, activationEvents/startupCommands,
+   plus expanded command actions (javascript, multi, theme, setSetting...). */
+const _extStatusBarItems=[];   // {id,text,tooltip,alignment,command}
+const _extActivityButtons=[];  // {id,icon,label,view,command}
+const _extViewDefs=new Map();  // id -> {title,icon,html}
+const _extMenuDefs=[];         // {target,label,icon,items}
+function rebuildStatusBarItems(){
+  _extStatusBarItems.length=0;
+  state.extensions.forEach(x=>{((x.contributes&&x.contributes.statusBarItems)||[]).forEach(it=>{
+    if(it&&it.text)_extStatusBarItems.push({id:x.id+'.'+(it.id||uid()),text:String(it.text),tooltip:it.tooltip||'',alignment:it.alignment==='left'?'left':'right',command:it.command||''});
+  });});
+}
+function rebuildActivityButtons(){
+  _extActivityButtons.length=0;
+  state.extensions.forEach(x=>{((x.contributes&&x.contributes.activityBarButtons)||[]).forEach(b=>{
+    if(b&&b.icon)_extActivityButtons.push({id:b.id||uid(),icon:b.icon,label:b.label||'',view:b.view||'',command:b.command||''});
+  });});
+}
+function rebuildViews(){
+  _extViewDefs.clear();
+  state.extensions.forEach(x=>{const vs=x.contributes&&x.contributes.views;if(!vs)return;
+    (Array.isArray(vs)?vs:Object.entries(vs).map(([id,d])=>Object.assign({id},d))).forEach(v=>{
+      if(v&&v.id&&v.html)_extViewDefs.set(v.id,{title:v.title||v.label||v.id,icon:v.icon||'🧩',html:String(v.html)});
+    });});
+}
+function rebuildMenuDefs(){
+  _extMenuDefs.length=0;
+  state.extensions.forEach(x=>{((x.contributes&&x.contributes.menus)||[]).forEach(m=>{
+    if(m&&(m.items||[]).length)_extMenuDefs.push({target:m.menu||'',label:m.label||'',items:m.items});
+  });});
+}
+function rebuildLanguagesAndIcons(){
+  Object.keys(_extLangMap).forEach(k=>delete _extLangMap[k]);
+  Object.keys(_extFileIcons).forEach(k=>delete _extFileIcons[k]);
+  const known=state.monacoReady?new Set((monaco.languages.getLanguages()||[]).map(l=>l.id)):null;
+  state.extensions.forEach(x=>{const c=x.contributes||{};
+    (c.languages||[]).forEach(l=>{
+      if(!l)return;let mid=l.id||'plaintext';
+      if(known&&!known.has(mid))mid='plaintext';
+      (l.extensions||[]).forEach(e=>{_extLangMap[String(e).toLowerCase().replace(/^\./,'')]=mid;});
+    });
+    Object.entries(c.fileIcons||{}).forEach(([ext,ic])=>{_extFileIcons[String(ext).toLowerCase().replace(/^\./,'')]=String(ic);});
+  });
+}
+function rebuildExtensionRuntime(){
+  rebuildSnippets();rebuildCommands();rebuildKeybindings();
+  rebuildStatusBarItems();rebuildActivityButtons();rebuildViews();rebuildMenuDefs();rebuildLanguagesAndIcons();
+  applyUIExtensions();
+  buildMenus();renderActivityBar();renderStatusbar();renderSidebar();updateExtCount();
+}
+function activateStartupExtensions(){
+  state.extensions.forEach(x=>{
+    const ev=x.activationEvents||(x.contributes&&x.contributes.activationEvents)||[];
+    if(ev.includes('*')||ev.includes('onStartup'))
+      ((x.startupCommands)||(x.contributes&&x.contributes.startupCommands)||[]).forEach(id=>setTimeout(()=>runExtCommandById(id),400));
+  });
+}
+/* Node lookup by path or name (any type) */
+function findNodeByRef(ref,type){
+  let hit=null;
+  const w=arr=>arr.some(x=>{
+    if((!type||x.type===type)&&(x.path===ref||x.name===ref)){hit=x;return true;}
+    return x.children?w(x.children):false;
+  });
+  w(state.fileList);return hit;
+}
+/* JS sandbox API handed to "javascript" commands */
+function makeBanApi(){return {
+  toast:(m,t)=>toast(String(m),t||'info'),
+  insert:t=>insertAtCursor(t),
+  getText:()=>state.editor?state.editor.getValue():'',
+  setText:t=>{if(state.editor)state.editor.setValue(String(t));},
+  getSelection:()=>{if(!state.editor)return'';const s=state.editor.getSelection();return s&&!s.isEmpty()?state.editor.getModel().getValueInRange(s):'';},
+  activeFile:()=>currentOpen(),
+  openFile:n=>{const hit=findNodeByRef(n,'file');if(hit){openNode(hit);return true;}return false;},
+  files:()=>flattenProject(state.fileList,state.fileList[0]?state.fileList[0].name:''),
+  setting:(k,v)=>{if(v===undefined)return state.settings[k];state.settings[k]=v;persistSettings();applyEditorSettings();},
+  theme:id=>applyTheme(id),
+  terminal:m=>{termLines(String(m),'term-info');if(!state.terminalVisible)toggleTerminal();},
+  runCommand:id=>runExtCommandById(id),
+  zen:()=>toggleZen(),
+  format:()=>formatActiveDoc(),
+  saveWorkspace:()=>saveWorkspace(true),
+  state:()=>({openCount:state.openFiles.length,project:state.fileList[0]&&state.fileList[0].name,extensions:state.extensions.map(e=>e.id)})
+};}
+function findFileByPathOrName(n){return findNodeByRef(n,'file');}
+function formatActiveDoc(){
+  if(!state.editor)return toast('No file open','info');
+  const a=state.editor.getAction('editor.action.formatDocument');
+  if(a)a.run();else toast('Formatting not available for this language','info');
+}
+
 /* ---------- command registry ---------- */
 const _extCommands=[]; // {id,title,type,icon,action,arg}
 const _extKeybinds=[]; // {combo, handler}
@@ -770,13 +1254,27 @@ function installCommands(ext){const cmds=ext.contributes&&ext.contributes.comman
 function installKeybindings(ext){const kb=ext.contributes&&ext.contributes.keybindings||[];kb.forEach(k=>_extKeybinds.push({key:normKey(k.key),handler:()=>runExtCommandById(k.command),label:k.title||k.command}));}
 function normKey(s){return (s||'').toLowerCase().replace(/[\s-]+/g,'+').replace(/control/g,'ctrl').split('+').map(x=>x.trim()).filter(Boolean).join('+');}
 function runExtCommandById(id){const c=_extCommands.find(x=>x.id===id)||_extCommands.find(x=>x.title===id);if(c)runExtCommand(c);}
-function runExtCommand(c){switch(c.type){
-  case 'alert':alert(c.arg||c.title);break;
-  case 'toast':case 'message':toast(c.arg||c.title,'info');break;
-  case 'terminal':termLines(c.arg||c.title,'term-info');if(!state.terminalVisible)toggleTerminal();break;
-  case 'insert':insertAtCursor(c.arg||'');break;
-  case 'open':{const n=findNode(state.fileList,c.arg)?findNode(state.fileList,c.arg):state.fileList.flatMap(g=>g.type==='folder'?(g.children||[]):[g]).find(f=>f.name===c.arg);if(n)openNode(n);else toast('File not found: '+c.arg,'error');break;}
-  default:toast(c.title+' — '+(c.arg||''),'info');
+function runExtCommand(c){
+  const A=c.arg;
+  switch((c.type||'toast')){
+    case 'alert':alert(A??c.title);break;
+    case 'toast':case 'message':case 'notify':toast(A||c.title,c.tone||'info');break;
+    case 'terminal':termLines(typeof A==='string'?A:c.title,'term-info');if(!state.terminalVisible)toggleTerminal();break;
+    case 'insert':insertAtCursor(A||'');break;
+    case 'open':{const n=findNode(state.fileList,c.arg)?findNode(state.fileList,c.arg):state.fileList.flatMap(g=>g.type==='folder'?(g.children||[]):[g]).find(f=>f.name===c.arg);if(n)openNode(n);else toast('File not found: '+c.arg,'error');break;}
+    case 'javascript':case 'eval':{try{new Function('ban',String(A||''))(makeBanApi());}catch(err){toast('Extension script error: '+err.message,'error',5000);}break;}
+    case 'setSetting':{if(A&&typeof A==='object'){Object.entries(A).forEach(([k,v])=>{state.settings[k]=v;});persistSettings();applyEditorSettings();applyTheme(state.settings.theme);renderSidebar();toast('Settings updated','success',1500);}break;}
+    case 'openUrl':if(A)window.open(A,'_blank');break;
+    case 'copy':navigator.clipboard.writeText(String(A??'')).then(()=>toast('Copied','success',1300)).catch(()=>{});break;
+    case 'theme':if(A)applyTheme(A);break;
+    case 'toggleTerminal':toggleTerminal();break;
+    case 'toggleSidebar':ui.toggleSidebar();break;
+    case 'zenMode':toggleZen();break;
+    case 'format':formatActiveDoc();break;
+    case 'newFile':{const nm=(A&&A.name)||'untitled.txt';createFile(nm,(A&&A.content)||'',null,null,false);break;}
+    case 'save':ui.save();break;
+    case 'multi':(Array.isArray(A)?A:[]).forEach(st=>runExtCommand({type:st.action||st.type,arg:st.arg,title:st.title}));break;
+    default:toast(c.title+' — '+(A||''),'info');
   }
 }
 
@@ -793,22 +1291,37 @@ const EXT_MANIFEST_TEMPLATE=`{
   "publisher": "you",
   "description": "What it does",
   "icon": "🧩",
+  "activationEvents": ["onStartup"],
   "contributes": {
+    "ui": { "accent": "#ff5f56", "radius": 10, "brandName": "Ban Code",
+            "css": ".tab.active{color:#ffd166}", "hide": [] },
     "commands": [
-      { "id": "myext.hello", "title": "Say Hello", "action": "toast", "arg": "Hello from my extension!" }
+      { "id": "my.hello", "title": "Say Hello", "action": "toast", "arg": "Hello!" },
+      { "id": "my.js", "title": "Run Some JS", "action": "javascript",
+        "arg": "ban.toast('Hi from JS! ' + ban.state().project)" },
+      { "id": "my.multi", "title": "Do Several Things", "action": "multi",
+        "arg": [ { "action": "toast", "arg": "Step 1" }, { "action": "insert", "arg": "// TODO" } ] }
     ],
     "themes": [
-      { "id": "myext.synth", "label": "Synthwave", "base": "vs-dark",
-        "colors": { "editor.background": "#241b2f", "editor.foreground": "#e6e6e6" },
+      { "id": "my.synth", "label": "Synthwave", "base": "vs-dark",
+        "colors": { "editor.background": "#241b2f" },
+        "chrome": { "accent": "#ff7edb", "sidebar": "#2a1f3d", "titlebar": "#1d1530" },
         "rules": [ { "token": "comment", "foreground": "#6a5c84", "fontStyle": "italic" } ] }
     ],
     "snippets": {
-      "javascript": [
-        { "label": "log", "prefix": "log", "body": ["console.log(\${1:value});", "$2"], "description": "console.log snippet" }
-      ]
+      "javascript": [ { "prefix": "log", "body": ["console.log($1);"], "description": "log" } ]
     },
-    "terminalCommands": { "hello": "Hello from the terminal!", "magic": "✨" },
-    "keybindings": [ { "key": "Ctrl+Alt+H", "command": "myext.hello", "title": "Say Hello" } ]
+    "terminalCommands": { "hello": { "description": "greets you", "output": "👋 Hello!" } },
+    "statusBarItems": [ { "text": "⚡ Boost", "tooltip": "Say hi", "alignment": "right", "command": "my.hello" } ],
+    "activityBarButtons": [ { "icon": "🌟", "label": "Star", "command": "my.hello" } ],
+    "views": [ { "id": "my.panel", "title": "My Panel", "icon": "🗂", "html": "<b>Hello!</b>" } ],
+    "menus": [
+      { "menu": "file", "items": [ { "command": "my.hello", "title": "Say Hello" } ] },
+      { "label": "My Tools", "items": [ { "command": "my.multi", "title": "Do Several Things" } ] }
+    ],
+    "languages": [ { "id": "python", "extensions": ["pyi"] } ],
+    "fileIcons": { "log": "📜", "env": "🔐" },
+    "keybindings": [ { "key": "Ctrl+Alt+H", "command": "my.hello" } ]
   }
 }`;
 function renderExtensions(body){
@@ -837,6 +1350,12 @@ function extCard(x){
   if(c.snippets&&Object.keys(c.snippets).length)chips.push('<span class="chip">✂ '+Object.values(c.snippets).reduce((a,b)=>a+b.length,0)+' snippets</span>');
   if(c.terminalCommands&&Object.keys(c.terminalCommands).length)chips.push('<span class="chip">⌨ '+Object.keys(c.terminalCommands).length+' term</span>');
   if(c.keybindings&&c.keybindings.length)chips.push('<span class="chip">🔧 '+c.keybindings.length+' kbd</span>');
+  if(c.ui)chips.push('<span class="chip">🖌 ui</span>');
+  if(c.statusBarItems&&c.statusBarItems.length)chips.push('<span class="chip">📊 '+c.statusBarItems.length+' sb</span>');
+  if(c.activityBarButtons&&c.activityBarButtons.length)chips.push('<span class="chip">📌 '+c.activityBarButtons.length+' abtn</span>');
+  if(c.views&&(Array.isArray(c.views)?c.views.length:Object.keys(c.views).length))chips.push('<span class="chip">🪟 '+(Array.isArray(c.views)?c.views.length:Object.keys(c.views).length)+' view</span>');
+  if(c.menus&&c.menus.length)chips.push('<span class="chip">☰ '+c.menus.length+' menu</span>');
+  if(c.languages&&c.languages.length)chips.push('<span class="chip">🌐 '+c.languages.length+' lang</span>');
   if(!chips.length)chips.push('<span class="chip">contributes: -</span>');
   return '<div class="ext-card"><div class="ext-top"><div class="ext-icon">'+esc(x.icon||'🧩')+'</div><div class="ext-info">'
     +'<div class="ext-name">'+esc(x.name)+' <span class="ext-ver">v'+esc(x.version||'1.0.0')+'</span></div>'
@@ -856,6 +1375,14 @@ function validateManifest(m){
   if(c.snippets&&(typeof c.snippets!=='object'))return '"snippets" must be an object';
   if(c.terminalCommands&&(typeof c.terminalCommands!=='object'))return '"terminalCommands" must be an object';
   if(c.keybindings&&!Array.isArray(c.keybindings))return '"keybindings" must be an array';
+  if(c.ui&&typeof c.ui!=='object')return '"ui" must be an object';
+  if(c.statusBarItems&&!Array.isArray(c.statusBarItems))return '"statusBarItems" must be an array';
+  if(c.activityBarButtons&&!Array.isArray(c.activityBarButtons))return '"activityBarButtons" must be an array';
+  if(c.views&&!(Array.isArray(c.views)||typeof c.views==='object'))return '"views" must be an array or object';
+  if(c.menus&&!Array.isArray(c.menus))return '"menus" must be an array';
+  if(c.languages&&!Array.isArray(c.languages))return '"languages" must be an array';
+  if(c.fileIcons&&typeof c.fileIcons!=='object')return '"fileIcons" must be an object';
+  if(c.settingsDefaults&&typeof c.settingsDefaults!=='object')return '"settingsDefaults" must be an object';
   return null;
 }
 function installExtension(manifest,source){
@@ -866,10 +1393,11 @@ function installExtension(manifest,source){
   state.extensions.push(manifest);
   persist();
   if(state.monacoReady&&manifest.contributes&&manifest.contributes.themes)defineExtensionThemes(manifest.contributes.themes);
-  registerExtensionSnippets(manifest);
-  installKeybindings(manifest);
-  installCommands(manifest);
-  rebuildMenus();
+  rebuildExtensionRuntime();
+  // one-time settings defaults from the extension
+  const sd=manifest.contributes&&manifest.contributes.settingsDefaults;
+  if(sd&&typeof sd==='object'){Object.assign(state.settings,sd);persistSettings();applyEditorSettings();applyTheme(state.settings.theme);}
+  activateStartupExtensions();
   renderAll();
   toast('Installed "'+manifest.name+'" 🧩','success');
   openExtensionsPanel();
@@ -878,18 +1406,53 @@ function uninstallExtension(id){
   const x=state.extensions.find(e=>e.id===id);if(!x)return;
   state.extensions=state.extensions.filter(e=>e.id!==id);persist();
   (x.contributes&&x.contributes.themes||[]).forEach(t=>{delete _themes[t.id];});
-  rebuildSnippets();rebuildKeybindings();rebuildCommands();
   if(state.settings.theme&&!themeList().find(t=>t.id===state.settings.theme))state.settings.theme='ban-dark';
-  if(state.monacoReady)applyTheme(state.settings.theme);
-  rebuildMenus();
-  renderSidebar();updateExtCount();
+  rebuildExtensionRuntime();
+  renderAll();
   toast('Uninstalled "'+x.name+'"','info');
 }
 function viewExtension(id){const x=state.extensions.find(e=>e.id===id);if(!x)return;
   openModal('<h2>🧩 '+esc(x.name)+'</h2><p>'+esc(x.description||'')+' · v'+esc(x.version||'')+' · by '+esc(x.publisher||'')+'</p><textarea readonly>'+esc(JSON.stringify(x,null,2))+'</textarea><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');}
+function showExtGuideModal(){
+  openModal('<h2>🧩 Extension Contribution Points</h2><p>Everything an extension .json file can contribute:</p><div class="codeblock">'
+    +'ui                accent, bg, sidebar, titlebar, card, radius,\n                  fontFamily, brandName, logo, css, hide[]\n'
+    +'commands          action: toast | alert | terminal | insert | open |\n                  javascript | copy | openUrl | theme | setSetting |\n                  toggleTerminal | toggleSidebar | zenMode | format |\n                  newFile | save | multi\n'
+    +'themes            colors + rules + chrome (page colors)\n'
+    +'snippets          { "language": [ {prefix, body[]} ] }\n'
+    +'terminalCommands  { "cmd": "output" | {description, output} }\n'
+    +'keybindings       [ {key, command} ]\n'
+    +'statusBarItems    [ {text, tooltip, alignment, command} ]\n'
+    +'activityBarButtons [ {icon, label, command | view} ]\n'
+    +'views             [ {id, title, icon, html} ]   custom side panels\n'
+    +'menus             [ {menu:"file|edit|view|help", items[]} ] or\n                  [ {label:"My Menu", items[]} ] for a new menu\n'
+    +'languages         [ {id, extensions[]} ]\n'
+    +'fileIcons         { "ext": "emoji" }\n'
+    +'settingsDefaults  { fontSize:16, ... } applied on install\n'
+    +'activationEvents ["onStartup"] + startupCommands [commandIds]\n\n'
+    +'JS commands receive a `ban` API: toast, insert, getText, setText,\ngetSelection, activeFile, openFile, files, setting(k,v), theme,\nterminal, runCommand, zen, format, saveWorkspace, state</div>'
+    +'<div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');
+}
+function loadProjectData(t,fname){
+  if(!(t&&t.files&&Array.isArray(t.files)))return false;
+  let fl=t.files;
+  if(fl.length>=1&&fl[0].type==='folder'&&fl[0].name===(t.name||'project'))fl=fl[0].children||[];
+  state.lazyImport=false;
+  state.fileList=[{id:uid(),name:t.name||'project',type:'folder',isOpen:true,children:buildNodeTree(fl,t.name||'project'),path:t.name||'project'}];
+  state.projectJson=t;state.projectDirty=false;
+  renderAll();
+  toast('Loaded project "'+(t.name||fname||'project')+'"','success');
+  return true;
+}
 function installFromFile(file){
   const reader=new FileReader();
-  reader.onload=()=>{try{const m=JSON.parse(reader.result);installExtension(m,file.name);}catch(e){toast('That JSON is not valid JSON: '+e.message,'error');}};
+  reader.onload=()=>{
+    try{
+      const m=JSON.parse(reader.result);
+      // smart detection: a project file ({files:[...]}) loads as a project instead of erroring
+      if(loadProjectData(m,file.name))return;
+      installExtension(m,file.name);
+    }catch(e){toast('That JSON is not valid JSON: '+e.message,'error');}
+  };
   reader.readAsText(file);
 }
 // drag & drop: handle files, folders, and .json extensions
@@ -969,37 +1532,36 @@ async function importDirectoryEntry(dirEntry,parentId,_isTop){
   const pPath=parent?(parent.path||parent.name):'';
   const folderNode={id:uid(),name:dirEntry.name,type:'folder',isOpen:false,children:[],path:pPath?pPath+'/'+dirEntry.name:dirEntry.name};
   if(parent&&parent.type==='folder'){if(!parent.children)parent.children=[];parent.children.push(folderNode);}else{state.fileList.push(folderNode);}
-  let processed=0,skipped=0,total=allEntries.length;
+  let processed=0,failed=0,total=allEntries.length;
   const lazyMode=total>_LAZY_THRESHOLD;
+  if(lazyMode)state.lazyImport=true;
   for(const entry of allEntries){
     if(prog&&prog.isCancelled())break;
     if(entry.isDirectory){
       await importDirectoryEntry(entry,folderNode.id,false);
     }else if(entry.isFile){
-      if(isLikelyBinary(entry.name)){skipped++;processed++;if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');continue;}
       try{
         const file=await new Promise((res,rej)=>{entry.file(res,rej);});
-        if(file.size>_MAX_FILE_SIZE){skipped++;processed++;if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');continue;}
         if(lazyMode){
           const fp=folderNode.path+'/'+entry.name;
           folderNode.children.push({id:uid(),name:entry.name,type:'file',language:langFromName(entry.name),content:'',path:fp});
           _pendingEntryRefs.set(fp,entry);
         }else{
-          const content=await file.text();
-          folderNode.children.push({id:uid(),name:entry.name,type:'file',language:langFromName(entry.name),content:content,path:folderNode.path+'/'+entry.name});
+          const rd=await readFileSmart(file,entry.name);
+          folderNode.children.push({id:uid(),name:entry.name,type:'file',language:langFromName(entry.name),content:rd.content,path:folderNode.path+'/'+entry.name,binary:rd.binary||undefined,mime:rd.mime||undefined});
         }
-      }catch(e){skipped++;}
+      }catch(e){failed++;}
     }
     processed++;
-    if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');
+    if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+(failed?' ('+failed+' failed)':''));
     if(processed%50===0)await yieldToUI();
   }
   folderNode.children.sort((a,b)=>{if(a.type!==b.type)return a.type==='folder'?-1:1;return a.name.localeCompare(b.name);});
   if(_isTop!==false){
     state.projectDirty=true;renderExplorer();renderStatusbar();
     if(prog)prog.done();
-    const added=processed-skipped;
-    toast('Imported "'+dirEntry.name+'" ('+added+' files'+(skipped?', '+skipped+' skipped':'')+')'+(lazyMode?' — contents load on demand when you open files':''),'success',lazyMode?5000:3000);
+    const added=processed-failed;
+    toast('Imported "'+dirEntry.name+'" ('+added+' files'+(failed?', '+failed+' failed':'')+')'+(lazyMode?' — contents load on demand when you open files':''),'success',lazyMode?5000:3000);
   }
 }
 function openExtensionsPanel(){state.activityView='extensions';state.sidebarVisible=true;renderActivityBar();renderSidebar();}
@@ -1010,14 +1572,23 @@ function renderSettings(body){
   const setRow=(id,label,desc,control)=>'<div class="set-row"><div><div class="lbl">'+label+'</div><div class="desc">'+desc+'</div></div>'+control+'</div>';
   body.innerHTML=
     '<div class="sec-title">Editor</div>'
-    +setRow('theme','Color Theme','Applied live','<select id="st-theme">'+themeList().map(t=>'<option value="'+t.id+'" '+(s.theme===t.id?'selected':'')+'>'+t.label+'</option>').join('')+'</select>')
+    +setRow('theme','Color Theme','Applied live','<select id="st-theme">'+themeList().map(t=>'<option value="'+t.id+'" '+(s.theme===t.id?'selected':'')+'>'+esc(t.label)+'</option>').join('')+'</select>')
     +setRow('fontSize','Font Size','px','<input type="number" id="st-font" min="8" max="40" value="'+s.fontSize+'" style="width:60px">')
     +setRow('tabSize','Tab Size','spaces per tab','<input type="number" id="st-tab" min="1" max="8" value="'+s.tabSize+'" style="width:60px">')
+    +setRow('lineHeight','Line Height','px (0 = auto)','<input type="number" id="st-lh" min="0" max="48" value="'+(s.lineHeight||0)+'" style="width:60px">')
     +setRow('wordWrap','Word Wrap','wrap at viewport','<span class="switch '+(s.wordWrap?'on':'')+'" id="st-wrap"></span>')
     +setRow('minimap','Minimap','show minimap','<span class="switch '+(s.minimap?'on':'')+'" id="st-mini"></span>')
     +setRow('lineNumbers','Line Numbers','show line numbers','<span class="switch '+(s.lineNumbers?'on':'')+'" id="st-line"></span>')
     +setRow('bracketPairColorization','Bracket Color','colorize pairs','<span class="switch '+(s.bracketPairColorization?'on':'')+'" id="st-brk"></span>')
+    +setRow('ligatures','Font Ligatures','=> !== etc. join up','<span class="switch '+(s.ligatures?'on':'')+'" id="st-lig"></span>')
+    +setRow('indentGuides','Indent Guides','vertical indent lines','<span class="switch '+(s.indentGuides?'on':'')+'" id="st-ind"></span>')
+    +setRow('stickyScroll','Sticky Scroll','pin scope headers at top','<span class="switch '+(s.stickyScroll?'on':'')+'" id="st-sticky"></span>')
+    +setRow('smoothCaret','Smooth Caret','animated cursor movement','<span class="switch '+(s.smoothCaret?'on':'')+'" id="st-caret"></span>')
     +setRow('cursorBlinking','Cursor Blink','style','<select id="st-cur"><option '+(s.cursorBlinking==='blink'?'selected':'')+'>blink</option><option '+(s.cursorBlinking==='smooth'?'selected':'')+'>smooth</option><option '+(s.cursorBlinking==='phase'?'selected':'')+'>phase</option><option '+(s.cursorBlinking==='solid'?'selected':'')+'>solid</option></select>')
+    +setRow('renderWhitespace','Render Whitespace','what whitespace to show','<select id="st-rws">'+['none','boundary','selection','all'].map(w=>'<option '+(s.renderWhitespace===w?'selected':'')+'>'+w+'</option>').join('')+'</select>')
+    +'<div class="divider"></div><div class="sec-title">Workspace</div>'
+    +setRow('autoSave','Auto-save Workspace','continuously save to browser storage','<span class="switch '+(s.autoSave?'on':'')+'" id="st-auto"></span>')
+    +setRow('restoreSession','Restore on Start','reopen last workspace after reload','<span class="switch '+(s.restoreSession?'on':'')+'" id="st-restore"></span>')
     +'<div class="divider"></div><div class="sec-title">Reset</div><button class="btn sm block" onclick="ui.resetSettings()">↺ Reset to defaults</button>'
     +'<div class="divider"></div><div class="sec-title">Data</div><button class="btn sm block danger" onclick="ui.clearAllData()">🗑 Clear All Data</button>';
   $('#st-theme').onchange=e=>{s.theme=e.target.value;persistSettings();applyTheme(s.theme);};
@@ -1027,13 +1598,27 @@ function renderSettings(body){
   const tabEl=$('#st-tab');
   tabEl.oninput=e=>{const v=parseInt(e.target.value);if(v>=1&&v<=8){s.tabSize=v;persistSettings();applyEditorSettings();}};
   tabEl.onchange=e=>{s.tabSize=parseInt(e.target.value)||2;persistSettings();applyEditorSettings();renderStatusbar();};
+  const lhEl=$('#st-lh');
+  lhEl.onchange=e=>{const v=parseInt(e.target.value);s.lineHeight=(v>=0&&v<=48)?v:0;persistSettings();applyEditorSettings();};
   sw('#st-wrap',v=>{s.wordWrap=v;persistSettings();applyEditorSettings();});
   sw('#st-mini',v=>{s.minimap=v;persistSettings();applyEditorSettings();});
   sw('#st-line',v=>{s.lineNumbers=v;persistSettings();applyEditorSettings();});
   sw('#st-brk',v=>{s.bracketPairColorization=v;persistSettings();applyEditorSettings();});
+  sw('#st-lig',v=>{s.ligatures=v;persistSettings();applyEditorSettings();});
+  sw('#st-ind',v=>{s.indentGuides=v;persistSettings();applyEditorSettings();});
+  sw('#st-sticky',v=>{s.stickyScroll=v;persistSettings();applyEditorSettings();});
+  sw('#st-caret',v=>{s.smoothCaret=v;persistSettings();applyEditorSettings();});
   $('#st-cur').onchange=e=>{s.cursorBlinking=e.target.value;persistSettings();applyEditorSettings();};
+  $('#st-rws').onchange=e=>{s.renderWhitespace=e.target.value;persistSettings();applyEditorSettings();};
+  sw('#st-auto',v=>{s.autoSave=v;persistSettings();if(v){saveWorkspace(true);toast('Workspace saved','success',1400);}});
+  sw('#st-restore',v=>{s.restoreSession=v;persistSettings();});
 }
-function resetSettings(){state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth'};persistSettings();applyTheme('ban-dark');applyEditorSettings();renderSidebar();renderStatusbar();toast('Settings reset to defaults','success');}
+function resetSettings(){
+  state.settings=Object.assign({},DEFAULT_SETTINGS);
+  persistSettings();applyTheme('ban-dark');applyEditorSettings();
+  if(document.body.classList.contains('zen'))document.body.classList.remove('zen');
+  renderSidebar();renderStatusbar();toast('Settings reset to defaults','success');
+}
 
 /* ---------- menus ---------- */
 let _openMenu=null;
@@ -1068,10 +1653,13 @@ function buildMenus(){
       ['SEP'],
       ['Find','Ctrl+F','🔍',()=>ui.exec('find')],
       ['Replace','Ctrl+H','↔',()=>ui.exec('replace')],
+      ['Format Document','Shift+Alt+F','🪄',()=>formatActiveDoc()],
     ]},
     {id:'view',label:'View',items:[
       ['Toggle Sidebar','Ctrl+B','◧',()=>ui.toggleSidebar()],
       ['Toggle Terminal','Ctrl+`','⚡',()=>toggleTerminal()],
+      ['Toggle Zen Mode','Ctrl+Alt+Z','🧘',()=>toggleZen()],
+      ['Toggle HTML Preview','','👁',()=>toggleHtmlPreview()],
       ['SEP'],
       ['Explorer','Ctrl+Shift+E','🗂',()=>ui.activate('explorer')],
       ['Search','Ctrl+Shift+F','🔍',()=>ui.activate('search')],
@@ -1085,11 +1673,21 @@ function buildMenus(){
     {id:'help',label:'Help',items:[
       ['Welcome','','🏠',()=>ui.showWelcome()],
       ['Keyboard Shortcuts','','⌨️',()=>ui.showShortcuts()],
+      ['Extension Guide','','🧩',()=>showExtGuideModal()],
       ['About Ban Code','','🚫',()=>ui.about()],
       ['SEP'],
       ['Documentation (VS Code)','','📖',()=>window.open('https://code.visualstudio.com/docs','_blank')],
     ]},
   ];
+  // extension-contributed menu items: merge into built-in menus or create new top-level menus
+  _extMenuDefs.forEach(def=>{
+    const mapped=def.items.map(mi=>[mi.title||mi.command||'Item','',mi.icon||'🧩',()=>runExtCommandById(mi.command)]);
+    if(def.target){
+      const t=menus.find(m=>m.id===def.target);
+      if(t){if(t.items[t.items.length-1]&&t.items[t.items.length-1][0]!=='SEP')t.items.push(['SEP']);t.items.push(...mapped);return;}
+    }
+    menus.push({id:'extmenu-'+(def.label||uid()),label:def.label||'More',items:mapped});
+  });
   // inject extension commands into a "Commands" menu
   if(_extCommands.length){
     menus.push({id:'ext',label:'Commands',items:_extCommands.map(c=>[c.title,'',c.icon||'🧩',()=>runExtCommand(c)])});
@@ -1119,6 +1717,14 @@ function openPalette(mode){_palMode=mode;_palSel=0;$('#palette-input').value='';
   const inp=$('#palette-input');inp.placeholder=mode==='cmd'?'Type a command (Ctrl+Shift+P)...':'Type to open a file...';
   $('#palette-overlay').classList.add('open');buildPalette('');inp.focus();}
 function closePalette(){$('#palette-overlay').classList.remove('open');}
+function fuzzyScore(q,s){
+  q=String(q).toLowerCase();s=String(s).toLowerCase();
+  let qi=0,score=0,run=0;
+  for(let i=0;i<s.length&&qi<q.length;i++){
+    if(s[i]===q[qi]){qi++;run++;score+=2+run;}else run=0;
+  }
+  return qi===q.length?score:-1;
+}
 function buildPalette(q){
   let items=[];
   if(_palMode==='cmd'){
@@ -1127,6 +1733,9 @@ function buildPalette(q){
       {t:'New File',p:()=>ui.newFile()},{t:'New Folder',p:()=>ui.newFolder()},
       {t:'Save File',d:'Ctrl+S',p:()=>ui.save()},{t:'Export as ZIP',p:()=>ui.exportZip()},{t:'Install Extension',p:()=>ui.installExtension()},
       {t:'Toggle Terminal',d:'Ctrl+`',p:()=>toggleTerminal()},{t:'Toggle Sidebar',d:'Ctrl+B',p:()=>ui.toggleSidebar()},
+      {t:'Toggle Zen Mode',d:'Ctrl+Alt+Z',p:()=>toggleZen()},{t:'Toggle HTML Preview',d:'html',p:()=>toggleHtmlPreview()},
+      {t:'Format Document',d:'Shift+Alt+F',p:()=>formatActiveDoc()},
+      {t:'Save Workspace Now',p:()=>{saveWorkspace(true);toast('Workspace saved to browser storage','success',1600);}},
       {t:'Show Welcome',p:()=>ui.showWelcome()},{t:'Reset Settings',p:()=>ui.resetSettings()},
       {t:'Open Settings',d:'Ctrl+,',p:()=>ui.activate('settings')},{t:'Search Files',d:'Ctrl+Shift+F',p:()=>ui.activate('search')},
       {t:'Open Extensions',d:'Ctrl+Shift+X',p:()=>ui.activate('extensions')},
@@ -1138,9 +1747,9 @@ function buildPalette(q){
     items=all.map(f=>({t:fileIcon(f.name)+' '+f.name,d:path(f),p:()=>openNode(f)}));
     if(!items.length)items=[{t:'(empty workspace)',p:()=>toast('Add a file first','info')}];
   }
-  const ql=q.toLowerCase();
-  items=items.filter(i=>!ql||i.t.toLowerCase().includes(ql));
-  _paletteItems=items;_palSel=Math.min(_palSel,items.length-1);
+  const ql=q.toLowerCase().trim();
+  if(ql)items=items.map(i=>({i,s:fuzzyScore(ql,i.t)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).map(x=>x.i);
+  _paletteItems=items;_palSel=Math.max(0,Math.min(_palSel,items.length-1));
   renderPaletteList();
 }
 function path(node){return node.path||node.name;}
@@ -1167,7 +1776,7 @@ $('#modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay
 
 /* ---------- file io (open/save/export) ---------- */
 const ui={
-  newProject(){const name=prompt('Project name:','my-project');if(!name||!name.trim())return;const proj={name:name.trim(),version:'1.0.0',files:[]};state.fileList=[{id:uid(),name:proj.name,type:'folder',isOpen:true,children:[],path:proj.name}];state.projectJson=proj;renderExplorer();renderStatusbar();},
+  newProject(){const name=prompt('Project name:','my-project');if(!name||!name.trim())return;const proj={name:name.trim(),version:'1.0.0',files:[]};state.fileList=[{id:uid(),name:proj.name,type:'folder',isOpen:true,children:[],path:proj.name}];state.projectJson=proj;state.lazyImport=false;state.projectDirty=true;renderExplorer();renderStatusbar();},
   newFileAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('File name (e.g. index.html):','untitled.txt');if(name&&name.trim())createFile(name.trim(),'',null,parentId);},
   newFile(){this.newFileAt(state.fileList[0]&&state.fileList[0].id||null);},
   newFolderAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('Folder name:','new-folder');if(name&&name.trim())createFolder(name.trim(),parentId);},
@@ -1201,16 +1810,24 @@ const ui={
     +'Ctrl+Shift+P Command Palette\nCtrl+P       Quick Open\n'
     +'Ctrl+Shift+F Search\nCtrl+Shift+X Extensions\n'
     +'Ctrl+,       Settings\nCtrl+= / Ctrl+- Zoom\n'
+    +'Ctrl+Alt+Z   Zen Mode (Esc exits)\nShift+Alt+F  Format Document\n'
+    +'Middle-click tab: close · Right-click tab: tab menu\n'
     +'Tip: Use File menu or Command Palette to import folders & files</div><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
-  about(){toast('🚫 Ban Code v2.0 — extension-powered editor','info');openModal('<h2>🚫 Ban Code v2.0</h2><p>A lightweight, extension-powered code editor that runs in a single HTML file.<br>Extensions are plain .json files you can install and uninstall.</p><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
-  exec(a){if(a==='undo'&&state.editor)state.editor.trigger('','undo');if(a==='redo'&&state.editor)state.editor.trigger('','redo');if(a==='find'&&state.editor)state.editor.trigger('','actions.find');if(a==='replace'&&state.editor)state.editor.trigger('','editor.action.startFindReplaceAction');},
+  about(){toast('🚫 Ban Code v3.0 — extension-powered editor','info');openModal('<h2>🚫 Ban Code v3.0</h2><p>A lightweight, extension-powered code editor that runs in a single HTML file.<br>Extensions are plain .json files — they can add commands, themes, snippets, custom panels,<br>status bar items, menus, languages and even run JavaScript through the <b>ban</b> API.</p><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
+  exec(a){
+    if(a==='undo'&&state.editor)state.editor.trigger('','undo');
+    if(a==='redo'&&state.editor)state.editor.trigger('','redo');
+    if(a==='find'&&state.editor)state.editor.trigger('','actions.find');
+    if(a==='replace'&&state.editor)state.editor.trigger('','editor.action.startFindReplaceAction');
+    if(a==='cycleTab'){const sizes=[2,4,8];const i=Math.max(0,sizes.indexOf(state.settings.tabSize));state.settings.tabSize=sizes[(i+1)%sizes.length];persistSettings();applyEditorSettings();renderStatusbar();}
+  },
   zoom(d){const n=Math.max(8,Math.min(40,(state.settings.fontSize||14)+d));state.settings.fontSize=n;persistSettings();applyEditorSettings();renderStatusbar();
     const fontInput=$('#st-font');if(fontInput)fontInput.value=n;},
   resetZoom(){state.settings.fontSize=14;persistSettings();applyEditorSettings();renderStatusbar();
     const fontInput=$('#st-font');if(fontInput)fontInput.value=14;},
   resetSettings(){resetSettings();},
   closeModal(){_modalLocked=false;closeModal();},
-  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth'};if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildSnippets();rebuildKeybindings();rebuildCommands();buildMenus();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
+  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, the workspace, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.lazyImport=false;state.settings=Object.assign({},DEFAULT_SETTINGS);if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildExtensionRuntime();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
   exportZip(){exportZip();},
 };
 function download(name,content){const b=new Blob([content],{type:'text/plain'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
@@ -1342,16 +1959,13 @@ function flattenProject(nodes,path){
   (nodes||[]).forEach(n=>{
     const p=path?(path+'/'+n.name):n.name;
     if(n.type==='folder'){out.push({type:'folder',name:n.name,children:flattenProject(n.children,p)});}
-    else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
+    else{const o={type:'file',name:n.name,content:n.content||'',path:p};if(n.binary)o.binary=true;if(n.mime)o.mime=n.mime;out.push(o);}
   });
   return out;
 }
 
 /* ---------- file input handlers ---------- */
 
-/* Binary file extensions to skip during import */
-const _BIN_EXTS=new Set(['png','jpg','jpeg','gif','bmp','ico','webp','svg','tiff','tif','avif','mp4','mp3','wav','ogg','webm','avi','mov','mkv','flac','aac','m4a','wma','wmv','flv','zip','tar','gz','bz2','xz','7z','rar','iso','dmg','exe','dll','so','dylib','bin','dat','pdb','class','jar','war','ear','woff','woff2','ttf','otf','eot','ico','icns','pdf','doc','docx','xls','xlsx','ppt','pptx','psd','ai','sketch','fig','sqlite','db','sqlite3']);
-const _MAX_FILE_SIZE=2*1024*1024; // 2MB per file
 const _IMPORT_CHUNK=100; // process 100 files per yield
 const _LAZY_THRESHOLD=3000; // above this file count, skip content reading (structure-only import)
 const _MAX_PROJECT_FILES=500000; // absolute hard limit for project file count
@@ -1372,32 +1986,28 @@ function showImportProgress(title){
   };
 }
 
-/* Check if a file is likely binary based on extension */
-function isLikelyBinary(name){const ext=(name.includes('.')?name.split('.').pop().toLowerCase():'');return _BIN_EXTS.has(ext);}
-
 /* Yield to the event loop so the UI can repaint */
 function yieldToUI(){return new Promise(r=>setTimeout(r,0));}
 
 /* Read file entries with Map-based O(1) folder lookup and structure-only mode for large projects.
-   Returns {tree, skipped, total, lazy} */
+   Every file is imported — nothing is skipped. Returns {tree, failed, total, lazy} */
 async function readFolderEntries(files, progress, rootName){
   const total=files.length;
   if(total>_MAX_PROJECT_FILES){
     progress.update(100,'Too many files ('+total.toLocaleString()+'). Limit is '+(_MAX_PROJECT_FILES/1000)+'K.');
-    return {tree:{type:'folder',name:rootName,children:[]},skipped:total,total,lazy:true};
+    return {tree:{type:'folder',name:rootName,children:[]},failed:total,total,lazy:true};
   }
   const root={type:'folder',name:rootName,children:[]};
   const lazyMode=total>_LAZY_THRESHOLD;
+  if(lazyMode)state.lazyImport=true;
   const folderMap=new Map();
   folderMap.set('',root.children);
-  let read=0,skipped=0;
+  let read=0,failed=0;
   for(let i=0;i<total;i++){
     if(progress.isCancelled())break;
     const f=files[i];
     const parts=f.webkitRelativePath.split('/');
     parts.shift();
-    if(isLikelyBinary(f.name)){skipped++;read++;if(read%200===0){progress.update(read/total*100,'Scanned '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');await yieldToUI();}continue;}
-    if(f.size>_MAX_FILE_SIZE){skipped++;read++;if(read%200===0){progress.update(read/total*100,'Scanned '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');await yieldToUI();}continue;}
     let cur=root.children;
     const fp=[];
     for(let j=0;j<parts.length-1;j++){
@@ -1417,17 +2027,22 @@ async function readFolderEntries(files, progress, rootName){
       cur.push({type:'file',name:parts[parts.length-1],content:''});
       _pendingFileRefs.set(fp,f);
     }else{
-      try{const content=await f.text();cur.push({type:'file',name:parts[parts.length-1],content:content});}
-      catch(e){skipped++;}
+      try{
+        const rd=await readFileSmart(f);
+        const item={type:'file',name:parts[parts.length-1],content:rd.content};
+        if(rd.binary){item.binary=true;item.mime=rd.mime;}
+        cur.push(item);
+      }
+      catch(e){failed++;cur.push({type:'file',name:parts[parts.length-1],content:''});}
     }
     read++;
     if(read%200===0){
-      progress.update(read/total*100,(lazyMode?'Scanning':'Reading')+' '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');
+      progress.update(read/total*100,(lazyMode?'Scanning':'Reading')+' '+read.toLocaleString()+'/'+total.toLocaleString()+(failed?' ('+failed+' failed)':''));
       await yieldToUI();
     }
   }
-  progress.update(100,'Done — '+read.toLocaleString()+' files'+(lazyMode?' scanned':' read')+', '+skipped+' skipped');
-  return {tree:root,skipped,total,lazy:lazyMode};
+  progress.update(100,'Done — '+read.toLocaleString()+' files'+(lazyMode?' scanned':' read')+(failed?', '+failed+' failed':''));
+  return {tree:root,failed,total,lazy:lazyMode};
 }
 
 /* Build flat file list for JSON project format */
@@ -1436,7 +2051,7 @@ function treeToFlat(nodes,basePath){
   (nodes||[]).forEach(n=>{
     const p=basePath?(basePath+'/'+n.name):n.name;
     if(n.type==='folder'){out.push({type:'folder',name:n.name,children:treeToFlat(n.children,p)});}
-    else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
+    else{const o={type:'file',name:n.name,content:n.content||'',path:p};if(n.binary)o.binary=true;if(n.mime)o.mime=n.mime;out.push(o);}
   });
   return out;
 }
@@ -1461,7 +2076,7 @@ $('#import-folder-input').addEventListener('change',async e=>{
     state.projectJson=proj;state.projectDirty=false;
     renderExplorer();renderTabs();renderStatusbar();renderEditor();
     if(files.length<=500&&!lazy){download(rootName+'.json',JSON.stringify(proj,null,2));}
-    const msg='Imported "'+rootName+'" ('+files.length.toLocaleString()+' files'+(result.skipped?', '+result.skipped.toLocaleString()+' skipped':'')+')';
+    const msg='Imported "'+rootName+'" ('+files.length.toLocaleString()+' files'+(result.failed?', '+result.failed.toLocaleString()+' failed':'')+')';
     toast(msg+(lazy?' — contents load on demand when you open files':''),'success',lazy?5000:3000);
   }catch(err){toast('Import failed: '+err.message,'error');}
   prog.done();
@@ -1495,23 +2110,22 @@ async function importFilesIntoNode(files,parentId){
   const parent=findNode(state.fileList,parentId);
   if(!parent||parent.type!=='folder'){toast('Target folder not found','error');return;}
   const prog=showImportProgress('Importing '+files.length+' file'+(files.length>1?'s':'')+'...');
-  let added=0,skipped=0;
+  let added=0,failed=0;
   for(let i=0;i<files.length;i++){
     if(prog.isCancelled())break;
     const f=files[i];
-    if(isLikelyBinary(f.name)||f.size>_MAX_FILE_SIZE){skipped++;prog.update(i/files.length*100,'Processed '+i+'/'+files.length+' ('+skipped+' skipped)');continue;}
     try{
-      const content=await f.text();
-      const node=createFile(f.name,content,null,parentId,true);
-      if(node)added++;
-    }catch(e){skipped++;}
-    prog.update((i+1)/files.length*100,'Processed '+(i+1)+'/'+files.length+' ('+skipped+' skipped)');
+      const rd=await readFileSmart(f);
+      const node=createFile(f.name,rd.content,null,parentId,true);
+      if(node){added++;if(rd.binary){node.binary=true;node.mime=rd.mime;}}
+    }catch(e){failed++;}
+    prog.update((i+1)/files.length*100,'Processed '+(i+1)+'/'+files.length+(failed?' ('+failed+' failed)':''));
     if(i%_IMPORT_CHUNK===0)await yieldToUI();
   }
   state.projectDirty=true;
   renderExplorer();renderStatusbar();
   prog.done();
-  toast('Imported '+added+' file'+(added!==1?'s':'')+(skipped?', '+skipped+' skipped':''),'success');
+  toast('Imported '+added+' file'+(added!==1?'s':'')+(failed?', '+failed+' failed':''),'success');
 }
 
 /* Generic: import a folder tree into a folder node */
@@ -1529,7 +2143,7 @@ async function importFolderIntoNode(files,folderName,parentId){
   state.projectDirty=true;
   renderExplorer();renderStatusbar();
   prog.done();
-  toast('Imported "'+folderName+'" ('+result.total+' files'+(result.skipped?', '+result.skipped+' skipped':'')+')','success');
+  toast('Imported "'+folderName+'" ('+result.total+' files'+(result.failed?', '+result.failed+' failed':'')+')','success');
 }
 $('#install-ext-input').addEventListener('change',e=>{
   const files=Array.from(e.target.files||[]);
@@ -1539,10 +2153,60 @@ $('#install-ext-input').addEventListener('change',e=>{
 $('#load-project-input').addEventListener('change',e=>{
   const f=e.target.files&&e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=()=>{try{const t=JSON.parse(r.result);if(t&&t.files&&Array.isArray(t.files)){let fl=t.files;if(fl.length>=1&&fl[0].type==='folder'&&fl[0].name===(t.name||'project')){fl=fl[0].children||[];}state.fileList=[{id:uid(),name:t.name||'project',type:'folder',isOpen:true,children:buildNodeTree(fl,t.name||'project'),path:t.name||'project'}];state.projectJson=t;state.projectDirty=false;renderExplorer();renderStatusbar();toast('Loaded project "'+(t.name||'project')+'"','success');}else if(t&&t.contributes){installExtension(t,f.name);}else{toast('JSON is neither a project nor an extension manifest','error');}}catch(err){toast('Invalid JSON: '+err.message,'error');}};
+  r.onload=()=>{try{const t=JSON.parse(r.result);if(loadProjectData(t,f.name)){}else if(t&&t.contributes){installExtension(t,f.name);}else{toast('JSON is neither a project nor an extension manifest','error');}}catch(err){toast('Invalid JSON: '+err.message,'error');}};
   r.readAsText(f);e.target.value='';
 });
-function buildNodeTree(arr,parentPath,open){if(open===undefined)open=arr.length<100;return arr.map(item=>{if(item.type==='folder'){const p=parentPath?parentPath+'/'+item.name:item.name;return{id:uid(),name:item.name,type:'folder',isOpen:open,children:buildNodeTree(item.children||[],p,open),path:p};}return{id:uid(),name:item.name,type:'file',language:langFromName(item.name),content:item.content||'',path:item.path||item.name};});}
+function buildNodeTree(arr,parentPath,open){if(open===undefined)open=arr.length<100;return arr.map(item=>{if(item.type==='folder'){const p=parentPath?parentPath+'/'+item.name:item.name;return{id:uid(),name:item.name,type:'folder',isOpen:open,children:buildNodeTree(item.children||[],p,open),path:p};}const f={id:uid(),name:item.name,type:'file',language:langFromName(item.name),content:item.content||'',path:item.path||item.name};if(item.binary)f.binary=true;if(item.mime)f.mime=item.mime;return f;});}
+
+/* ---------- workspace persistence (auto-save / restore via localStorage) ---------- */
+function treeToFlatSkipLazy(nodes,basePath){
+  const out=[];
+  (nodes||[]).forEach(n=>{
+    const p=basePath?(basePath+'/'+n.name):n.name;
+    if(n.type==='folder'){if(n.children)out.push({type:'folder',name:n.name,children:treeToFlatSkipLazy(n.children,p)});}
+    else{
+      // skip lazy placeholders whose real content hasn't been read yet
+      if(n.path&&(_pendingFileRefs.has(n.path)||_pendingEntryRefs.has(n.path)))return;
+      const o={type:'file',name:n.name,content:n.content||'',path:p};if(n.binary)o.binary=true;if(n.mime)o.mime=n.mime;out.push(o);
+    }
+  });
+  return out;
+}
+function saveWorkspace(force){
+  if(!state.fileList.length)return;
+  if(!state.settings.autoSave&&!force)return;
+  try{
+    const root=state.fileList[0];
+    state.openFiles.forEach(f=>{const n=findNode(state.fileList,f.id);if(n)n.content=f.content;});
+    const snap={name:root.name,lazy:!!state.lazyImport,savedAt:Date.now(),
+      files:treeToFlatSkipLazy(root.children,root.name),
+      tabs:state.openFiles.map(f=>f.path||f.name),
+      active:(currentOpen()&&(currentOpen().path||currentOpen().name))||''};
+    const json=JSON.stringify(snap);
+    if(json.length>4500000){LS.del('workspace');return;}
+    localStorage.setItem('ban.workspace',json);
+    state.projectDirty=false;
+  }catch(e){}
+}
+function restoreWorkspace(){
+  if(!state.settings.restoreSession)return false;
+  const snap=LS.get('workspace',null);
+  if(!snap||!snap.files||!snap.files.length)return false;
+  if(snap.lazy)return false; // lazily-imported huge projects can't be restored without their file refs
+  try{
+    const name=snap.name||'workspace';
+    let fl=snap.files;
+    if(fl.length===1&&fl[0].type==='folder'&&fl[0].name===name)fl=fl[0].children||[];
+    state.lazyImport=false;
+    state.fileList=[{id:uid(),name:name,type:'folder',isOpen:true,children:buildNodeTree(fl,name,true),path:name}];
+    state.projectJson={name:name,version:'1.0.0',files:snap.files};state.projectDirty=false;
+    (snap.tabs||[]).forEach(p=>{const n=findNodeByRef(p,'file');if(n)openNode(n);});
+    if(snap.active){const n=findNodeByRef(snap.active,'file');if(n){state.activeFileId=n.id;renderTabs();renderEditor();renderStatusbar();setDocName(n.name);}}
+    return true;
+  }catch(e){return false;}
+}
+setInterval(()=>{if(state.projectDirty)saveWorkspace(false);},20000);
+window.addEventListener('beforeunload',()=>saveWorkspace(false));
 
 /* ---------- Right-click context menu ---------- */
 var _ctxNodeId=null;
@@ -1565,6 +2229,17 @@ document.addEventListener('contextmenu',function(e){
     showCtxMenu(e.clientX,e.clientY,state.fileList[0]);
   }else{hideCtxMenu();}
 });
+function openCtxMenuAt(x,y,html){
+  const m=$('#ctx-menu');if(!m)return;
+  m.innerHTML=html;m.style.display='block';
+  m.style.left='0px';m.style.top='0px';
+  const rect=m.getBoundingClientRect();
+  let mx=x,my=y;
+  if(x+rect.width>window.innerWidth)mx=window.innerWidth-rect.width-4;
+  if(y+rect.height>window.innerHeight)my=window.innerHeight-rect.height-4;
+  if(mx<0)mx=0;if(my<0)my=0;
+  m.style.left=mx+'px';m.style.top=my+'px';
+}
 function showCtxMenu(x,y,node){
   var m=$('#ctx-menu');if(!m)return;
   var isFolder=node.type==='folder';
@@ -1581,23 +2256,19 @@ function showCtxMenu(x,y,node){
   }else{
     h+='<div class="ctx-label">File</div>';
     h+='<div class="ctx-item" onclick="ctxOpenFile()">📝 Open</div>';
+    if(isFile){var _ce=(node.name.split('.').pop()||'').toLowerCase();
+      if(_ce==='html'||_ce==='htm'){h+='<div class="ctx-item" onclick="ctxPreviewHtml()">👁 Toggle Preview</div>';}
+    }
   }
   h+='<div class="ctx-item" onclick="ctxRename()">✏️ Rename</div>';
   h+='<div class="ctx-item" onclick="ctxDuplicate()">📋 Duplicate</div>';
   if(isFile){h+='<div class="ctx-item" onclick="ctxCopyPath()">🔗 Copy Path</div>';}
   h+='<div class="ctx-sep"></div>';
   h+='<div class="ctx-item danger" onclick="ctxDelete()">🗑️ Delete</div>';
-  m.innerHTML=h;
-  m.style.display='block';
-  m.style.left='0px';m.style.top='0px';
-  var rect=m.getBoundingClientRect();
-  var mx=x,my=y;
-  if(x+rect.width>window.innerWidth)mx=window.innerWidth-rect.width-4;
-  if(y+rect.height>window.innerHeight)my=window.innerHeight-rect.height-4;
-  if(mx<0)mx=0;if(my<0)my=0;
-  m.style.left=mx+'px';m.style.top=my+'px';
+  openCtxMenuAt(x,y,h);
 }
 function ctxOpenFile(){if(_ctxNode&&_ctxNode.type==='file')openNode(_ctxNode);hideCtxMenu();}
+function ctxPreviewHtml(){if(!_ctxNode)return;openNode(_ctxNode);state.previewMode[_ctxNode.id]=!state.previewMode[_ctxNode.id];renderEditor();hideCtxMenu();}
 function ctxRename(){
   if(!_ctxNode)return;
   var newName=prompt('Rename:',_ctxNode.name);
@@ -1691,10 +2362,13 @@ async function nativeZipChunked(files,progress){
 function combo(e){let k=e.key.toLowerCase();if(k===' ')k='space';let c='';if(e.ctrlKey||e.metaKey)c+='ctrl+';if(e.altKey)c+='alt+';if(e.shiftKey)c+='shift+';c+=k;return c;}
 function isTypingTarget(e){const t=e.target;return t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable||t.classList&&t.classList.contains('monaco-editor'));}
 document.addEventListener('keydown',e=>{
+  // Exit Zen mode with Escape
+  if(e.key==='Escape'&&document.body.classList.contains('zen')){toggleZen();return;}
   // Extension keybindings
   const c=combo(e);
   for(const kb of _extKeybinds){if(kb.key===c){kb.handler();e.preventDefault();return;}}
   const ctrl=e.ctrlKey||e.metaKey;
+  if(ctrl&&e.altKey&&e.key.toLowerCase()==='z'){e.preventDefault();toggleZen();return;}
   if(ctrl&&e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();openPalette('cmd');return;}
   if(ctrl&&!e.shiftKey&&(e.key==='+'||e.key==='=')){e.preventDefault();ui.zoom(1);return;}
   if(ctrl&&!e.shiftKey&&e.key==='-'){e.preventDefault();ui.zoom(-1);return;}
@@ -1718,13 +2392,17 @@ function boot(){
   // restore installed extensions
   state.extensions=LS.get('extensions',[]);
   state.extensions.forEach(x=>{registerExtensionSnippets(x);installKeybindings(x);installCommands(x);});
-  rebuildSnippets();rebuildKeybindings();rebuildCommands();
-  buildMenus();
-  applyTheme(state.settings.theme);
+  rebuildExtensionRuntime();
+  const restored=restoreWorkspace();
   renderActivityBar();renderSidebar();renderTabs();renderStatusbar();updateExtCount();
-  renderWelcome();
+  if(!restored)renderWelcome();
+  else{
+    if(state.openFiles.length)toast('Workspace restored ☁️','success',2000);
+    renderEditor();
+    if(!state.openFiles.length)renderWelcome();
+  }
   initMonaco();
-
+  setTimeout(activateStartupExtensions,600);
 }
 // wire the term head buttons already bound above
 window.ui=ui;window.toggleTerminal=toggleTerminal;
