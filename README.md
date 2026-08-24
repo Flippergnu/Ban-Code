@@ -116,5 +116,5 @@ ban-code-editor/
 └── README.md
 ```
 
-> Requires internet for the Monaco editor (loaded from a CDN) and for ZIP export
-> (JSZip). Everything else works offline.
+> Requires internet for the Monaco editor and for ZIP export
+> . Everything else works offline.
