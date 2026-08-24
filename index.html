@@ -1943,8 +1943,14 @@ async function exportZip(){
     prog.logTask('Download starting...','done');
     await new Promise(function(r){setTimeout(r,600);});
     const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=rootName+'.zip';
-    a.click();URL.revokeObjectURL(url);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=rootName+'.zip';
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},5000);
     prog.done();
     toast('Exported ZIP ('+files.length.toLocaleString()+' files, '+sizeMB+' MB, '+elapsed+'s)','success',4000);
   }catch(e){
@@ -2321,43 +2327,162 @@ function showExportProgress(title,totalFiles){
 }
 async function collectFilesAsync(nodes,base,onProgress){
   var out=[];
-  async function walk(ns,b){for(var i=0;i<ns.length;i++){var n=ns[i];var p=b?(b+'/'+n.name):n.name;if(n.type==='folder'){if(n.children)await walk(n.children,p);}else{out.push({name:p,content:n.content||''});}if(out.length%2000===0){onProgress(out.length);await yieldToUI();}}}
+  function dataUrlToBytes(s){
+    if(typeof s!=='string'||!s.startsWith('data:'))return null;
+    var comma=s.indexOf(',');
+    if(comma<0)return null;
+    var meta=s.slice(5,comma),body=s.slice(comma+1);
+    try{
+      if(/;base64/i.test(meta)){
+        var bin=atob(body),bytes=new Uint8Array(bin.length);
+        for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+        return bytes;
+      }
+      return new TextEncoder().encode(decodeURIComponent(body));
+    }catch(e){return null;}
+  }
+  async function walk(ns,b){
+    for(var i=0;i<ns.length;i++){
+      var n=ns[i],p=b?(b+'/'+n.name):n.name;
+      if(n.type==='folder'){
+        if(n.children&&n.children.length)await walk(n.children,p);
+        else out.push({name:p+'/',content:'',directory:true});
+      }else{
+        out.push({name:p,content:n.content||'',bytes:n.binary?dataUrlToBytes(n.content||''):null,binary:!!n.binary});
+      }
+      if(out.length%2000===0){onProgress(out.length);await yieldToUI();}
+    }
+  }
   await walk(nodes,base);
   return out;
 }
 async function nativeZipChunked(files,progress){
-  var encoder=new TextEncoder();var CHUNK=500;var total=files.length;var entries=[];var offset=0;
-  var hasCompression=typeof CompressionStream!=='undefined';
-  progress.logTask('Starting ZIP compression...','active');
-  progress.logTask(hasCompression?'Using deflate compression':'CompressionStream not available - storing uncompressed','');
+  /*
+   * Reliable ZIP writer.
+   * Use ZIP STORE (method 0) instead of CompressionStream('deflate-raw'):
+   * raw-deflate support is inconsistent between browsers and can create
+   * archives that download successfully but fail when extracted.
+   */
+  var encoder=new TextEncoder(),CHUNK=500,total=files.length,entries=[],offset=0;
+  progress.logTask('Starting ZIP archive creation...','active');
+  progress.logTask('Using ZIP STORE mode for maximum compatibility','');
+
+  function getBytes(f){
+    if(f.bytes instanceof Uint8Array)return f.bytes;
+    if(f.bytes instanceof ArrayBuffer)return new Uint8Array(f.bytes);
+    return encoder.encode(typeof f.content==='string'?f.content:String(f.content||''));
+  }
+  function dosDateTime(){
+    var d=new Date(),year=Math.max(1980,d.getFullYear());
+    return {
+      time:((d.getHours()&31)<<11)|((d.getMinutes()&63)<<5)|Math.floor(d.getSeconds()/2),
+      date:(((year-1980)&127)<<9)|(((d.getMonth()+1)&15)<<5)|(d.getDate()&31)
+    };
+  }
+  var dt=dosDateTime();
+
   for(var c=0;c<total;c+=CHUNK){
     if(progress.isCancelled())throw new Error('Cancelled');
     var end=Math.min(c+CHUNK,total);
-    for(var i=c;i<end;i++){var f=files[i];var data=encoder.encode(f.content||'');var compressed=data;var method=0;
-      if(hasCompression){try{var cs=new CompressionStream('deflate-raw');var w=cs.writable.getWriter();w.write(data);w.close();compressed=new Uint8Array(await new Response(cs.readable).arrayBuffer());method=8;}catch(e){}}
-      var nameBytes=encoder.encode(f.name);entries.push({nameBytes:nameBytes,data:data,compressed:compressed,method:method,crc:crc32(data),offset:offset});offset+=30+nameBytes.length+compressed.length;
+    for(var i=c;i<end;i++){
+      var f=files[i],data=f.directory?new Uint8Array(0):getBytes(f);
+      var name=String(f.name||'file').replace(/\\/g,'/');
+      if(f.directory&&!name.endsWith('/'))name+='/';
+      var nameBytes=encoder.encode(name);
+      if(nameBytes.length>0xFFFF)throw new Error('File path is too long: '+name);
+      if(data.length>0xFFFFFFFF)throw new Error('File is too large for ZIP32: '+name);
+      entries.push({
+        nameBytes:nameBytes,data:data,compressed:data,method:0,crc:crc32(data),
+        offset:offset,directory:!!f.directory,time:dt.time,date:dt.date
+      });
+      offset+=30+nameBytes.length+data.length;
+      if(offset>0xFFFFFFFF)throw new Error('Project is too large for ZIP32 (over 4 GiB).');
     }
-    progress.update(Math.round(end/total*80),'Compressing '+end.toLocaleString()+' / '+total.toLocaleString()+' files...');
-    progress.logTask('Compressed batch '+Math.ceil((c+1)/CHUNK)+' ('+end.toLocaleString()+' / '+total.toLocaleString()+')',c+CHUNK>=total?'done':'');
+    progress.update(Math.round(end/Math.max(total,1)*80),
+      'Preparing ZIP '+end.toLocaleString()+' / '+total.toLocaleString()+' files...');
+    progress.logTask('Prepared batch '+Math.ceil((c+1)/CHUNK)+' ('+end.toLocaleString()+' / '+total.toLocaleString()+')',
+      c+CHUNK>=total?'done':'');
     await yieldToUI();
   }
-  progress.update(85,'Assembling ZIP archive...');progress.logTask('Building local file headers...','active');await yieldToUI();
-  var cdOffset=offset;var cdSize=0;for(var ei=0;ei<entries.length;ei++){cdSize+=46+entries[ei].nameBytes.length;}
-  var buf=new ArrayBuffer(cdOffset+cdSize+22);var v=new DataView(buf);var u8=new Uint8Array(buf);var pos=0;
+
+  if(entries.length>0xFFFF)throw new Error('Project has too many files for ZIP32 (maximum 65,535).');
+
+  progress.update(85,'Assembling ZIP archive...');
+  progress.logTask('Writing local file headers...','active');
+  await yieldToUI();
+
+  var cdOffset=offset,cdSize=0;
+  for(var ei=0;ei<entries.length;ei++)cdSize+=46+entries[ei].nameBytes.length;
+  if(cdSize>0xFFFFFFFF||cdOffset>0xFFFFFFFF)throw new Error('ZIP central directory is too large.');
+
+  var buf=new ArrayBuffer(cdOffset+cdSize+22),v=new DataView(buf),u8=new Uint8Array(buf),pos=0;
+  var flags=0x0800; // UTF-8 filenames
+
   var HEADER_CHUNK=1000;
   for(var c2=0;c2<entries.length;c2+=HEADER_CHUNK){
     var endH=Math.min(c2+HEADER_CHUNK,entries.length);
-    for(var i2=c2;i2<endH;i2++){var e=entries[i2];v.setUint32(pos,0x04034b50,true);pos+=4;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,e.method,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,e.crc,true);pos+=4;v.setUint32(pos,e.compressed.length,true);pos+=4;v.setUint32(pos,e.data.length,true);pos+=4;v.setUint16(pos,e.nameBytes.length,true);pos+=2;v.setUint16(pos,0,true);pos+=2;u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;u8.set(e.compressed,pos);pos+=e.compressed.length;}
-    progress.update(85+Math.round(endH/entries.length*8),'Writing headers '+(c2+1)+'-'+endH+' / '+entries.length+'...');await yieldToUI();
+    for(var i2=c2;i2<endH;i2++){
+      var e=entries[i2];
+      v.setUint32(pos,0x04034b50,true);pos+=4;
+      v.setUint16(pos,20,true);pos+=2;
+      v.setUint16(pos,flags,true);pos+=2;
+      v.setUint16(pos,e.method,true);pos+=2;
+      v.setUint16(pos,e.time,true);pos+=2;
+      v.setUint16(pos,e.date,true);pos+=2;
+      v.setUint32(pos,e.crc>>>0,true);pos+=4;
+      v.setUint32(pos,e.compressed.length>>>0,true);pos+=4;
+      v.setUint32(pos,e.data.length>>>0,true);pos+=4;
+      v.setUint16(pos,e.nameBytes.length,true);pos+=2;
+      v.setUint16(pos,0,true);pos+=2;
+      u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;
+      u8.set(e.compressed,pos);pos+=e.compressed.length;
+    }
+    progress.update(85+Math.round(endH/Math.max(entries.length,1)*8),
+      'Writing files '+(c2+1)+'-'+endH+' / '+entries.length+'...');
+    await yieldToUI();
   }
-  progress.update(94,'Writing central directory...');progress.logTask('Building central directory...','active');await yieldToUI();
-  for(var i3=0;i3<entries.length;i3++){var e2=entries[i3];v.setUint32(pos,0x02014b50,true);pos+=4;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,e2.method,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,e2.crc,true);pos+=4;v.setUint32(pos,e2.compressed.length,true);pos+=4;v.setUint32(pos,e2.data.length,true);pos+=4;v.setUint16(pos,e2.nameBytes.length,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,0,true);pos+=4;v.setUint32(pos,e2.offset,true);pos+=4;u8.set(e2.nameBytes,pos);pos+=e2.nameBytes.length;}
-  progress.update(98,'Finalizing archive...');await yieldToUI();
-  v.setUint32(pos,0x06054b50,true);pos+=4;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,entries.length,true);pos+=2;v.setUint16(pos,entries.length,true);pos+=2;v.setUint32(pos,cdSize,true);pos+=4;v.setUint32(pos,cdOffset,true);pos+=4;v.setUint16(pos,0,true);pos+=2;
+
+  progress.update(94,'Writing central directory...');
+  progress.logTask('Building central directory...','active');
+  await yieldToUI();
+
+  for(var i3=0;i3<entries.length;i3++){
+    var e2=entries[i3];
+    v.setUint32(pos,0x02014b50,true);pos+=4;
+    v.setUint16(pos,20,true);pos+=2;
+    v.setUint16(pos,20,true);pos+=2;
+    v.setUint16(pos,flags,true);pos+=2;
+    v.setUint16(pos,e2.method,true);pos+=2;
+    v.setUint16(pos,e2.time,true);pos+=2;
+    v.setUint16(pos,e2.date,true);pos+=2;
+    v.setUint32(pos,e2.crc>>>0,true);pos+=4;
+    v.setUint32(pos,e2.compressed.length>>>0,true);pos+=4;
+    v.setUint32(pos,e2.data.length>>>0,true);pos+=4;
+    v.setUint16(pos,e2.nameBytes.length,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2;
+    v.setUint16(pos,0,true);pos+=2;
+    v.setUint16(pos,e2.directory?0x10:0,true);pos+=2;
+    v.setUint32(pos,e2.directory?0x10:0,true);pos+=4;
+    v.setUint32(pos,e2.offset>>>0,true);pos+=4;
+    u8.set(e2.nameBytes,pos);pos+=e2.nameBytes.length;
+    if((i3+1)%1000===0)await yieldToUI();
+  }
+
+  progress.update(98,'Writing end of central directory...');
+  await yieldToUI();
+  v.setUint32(pos,0x06054b50,true);pos+=4;
+  v.setUint16(pos,0,true);pos+=2;
+  v.setUint16(pos,0,true);pos+=2;
+  v.setUint16(pos,entries.length,true);pos+=2;
+  v.setUint16(pos,entries.length,true);pos+=2;
+  v.setUint32(pos,cdSize>>>0,true);pos+=4;
+  v.setUint32(pos,cdOffset>>>0,true);pos+=4;
+  v.setUint16(pos,0,true);pos+=2;
+
   progress.logTask('ZIP archive assembled successfully','done');
   return new Blob([buf],{type:'application/zip'});
 }
-
 /* ---------- keyboard ---------- */
 function combo(e){let k=e.key.toLowerCase();if(k===' ')k='space';let c='';if(e.ctrlKey||e.metaKey)c+='ctrl+';if(e.altKey)c+='alt+';if(e.shiftKey)c+='shift+';c+=k;return c;}
 function isTypingTarget(e){const t=e.target;return t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable||t.classList&&t.classList.contains('monaco-editor'));}
