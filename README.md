@@ -70,7 +70,6 @@ Extensions are **plain `.json` files** (VS Code-manifest style). You choose any
 
 | File                     | Adds                                                     |
 | ------------------------ | -------------------------------------------------------- |
-| `synthwave-theme.json`   | A neon "Synthwave '84" color theme                       |
 | `console-snippets.json`  | JS/TS snippets + commands + terminal commands            |
 | `git-tools.json`         | Git commands + a `Ctrl+Shift+G` keybinding               |
 | `demo-project.json`      | Not an extension — load it via **Load Project JSON**     |
