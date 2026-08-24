@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+<head><base href="https://d16ilfvy4mv02r.cloudfront.net/workspaces/zcDzJgY7cO0OZ8mDxqxM9NhZGOLGHBa6/cca0ffb3-495e-4d42-b32a-ba189e5bb58c/files/">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>🚫 Ban Code — Extension-Powered Editor</title>
@@ -436,7 +436,27 @@ function applyLazyContent(node,rd){
   if(rd.binary){node.binary=true;node.mime=rd.mime;}
   const f=state.openFiles.find(x=>x.id===node.id);
   if(f){f.content=rd.content;f.binary=node.binary;f.mime=node.mime;}
-  if(state.activeFileId===node.id)renderEditor(); // re-render in the right mode (viewer/code)
+  if(state.activeFileId===node.id){
+    // The pane was rendered while this file was still an empty placeholder.
+    // Two things must happen before a re-render can show the loaded content:
+    //   1) Discard the cached Monaco model for this file. It was created empty
+    //      when the tab opened, and `monaco.editor.getModel(uri)` would return
+    //      that empty model again on rebuild (leaving the code editor blank).
+    //   2) Clear the cached view mode so renderEditor() rebuilds the pane.
+    //      Viewer modes (image/audio/video/HTML) read file.content directly,
+    //      so they too need the rebuild to display the freshly-loaded data.
+    if(window.monaco){
+      try{
+        const cur=f||node;
+        const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(cur.path||cur.name));
+        const m=monaco.editor.getModel(uri);
+        if(m)m.dispose();
+      }catch(e){}
+    }
+    state.viewMode='';
+    state.viewFileId='';
+    renderEditor();
+  }
 }
 function closeFile(id){
   const idx=state.openFiles.findIndex(f=>f.id===id);
@@ -521,9 +541,9 @@ window.ctxTab=(id,op)=>{
 };
 
 /* ---------- explorer ---------- */
-const _TREE_BUDGET=5000;
-const _FOLDER_CHILD_CAP=5000;
-let _treeBudgetRemaining=_TREE_BUDGET;
+const _TREE_PAGE_SIZE=500; // Keep the DOM responsive while allowing arbitrarily large folders.
+const _TREE_PAGE_STEP=1000;
+
 function renderExplorer(){
   const body=$('#side-body');if(!body||state.activityView!=='explorer')return;
   body.innerHTML='<div class="sec-title">WORKSPACE</div>'
@@ -542,26 +562,49 @@ function renderExplorer(){
     +'<button class="btn sm block" onclick="ui.exportZip()">📦 Export as ZIP</button>';
   const tree=$('#tree');
   if(!state.fileList.length){tree.innerHTML='<div class="muted" style="padding:12px;text-align:center;font-size:12px">Empty workspace.<br>Create or open a project.</div>';return;}
-  _treeBudgetRemaining=_TREE_BUDGET;
   renderNodesInto(state.fileList,tree,0);
 }
+
+function treePageSize(node){
+  return Math.max(_TREE_PAGE_SIZE, Number(node._treeVisibleCount)||0);
+}
+
+function appendTreeMoreButton(container,folder,depth,shown,total){
+  const more=document.createElement('div');
+  more.className='tree-more';
+  more.style.cssText='padding:6px '+(8+depth*16)+'px;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+  more.innerHTML='<span class="muted" style="font-size:11px">'+
+    (total-shown).toLocaleString()+' more item'+(total-shown===1?'':'s')+'</span>'+
+    '<button class="btn sm" data-tree-more="'+folder.id+'">Show more</button>'+
+    '<button class="btn sm" data-tree-all="'+folder.id+'">Show all</button>';
+  container.appendChild(more);
+}
+
 function renderNodesInto(nodes,container,depth){
-  if(_treeBudgetRemaining<=0)return;
+  if(!nodes||!nodes.length)return;
   const frag=document.createDocumentFragment();
-  const len=Math.min(nodes.length,_FOLDER_CHILD_CAP,_treeBudgetRemaining);
-  for(let i=0;i<len;i++){
-    _treeBudgetRemaining--;
+
+  for(let i=0;i<nodes.length;i++){
     const n=nodes[i];
-    const row=document.createElement('div');row.className='tree-item';row.setAttribute('data-nid',n.id);
+    const row=document.createElement('div');
+    row.className='tree-item';
+    row.setAttribute('data-nid',n.id);
+
     if(n.type==='folder'){
       row.innerHTML='<span>'+(n.isOpen?'📂':'📁')+'</span><span class="name">'+esc(n.name)+'</span>'
         +'<span class="tbtn"><button data-nf="'+n.id+'" title="New file">＋</button><button data-nd="'+n.id+'" title="New folder">📁</button><button data-if="'+n.id+'" title="Import files">📥</button><button data-idir="'+n.id+'" title="Import folder">📦</button><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
       row.style.paddingLeft=(8+depth*16)+'px';
       frag.appendChild(row);
-      const ch=document.createElement('div');ch.className='child'+(n.isOpen?' open':'');
-      ch.setAttribute('data-cid',n.id);ch.setAttribute('data-depth',depth+1);
-      if(n.isOpen&&n.children&&n.children.length&&_treeBudgetRemaining>0){
-        renderNodesInto(n.children,ch,depth+1);
+
+      const ch=document.createElement('div');
+      ch.className='child'+(n.isOpen?' open':'');
+      ch.setAttribute('data-cid',n.id);
+      ch.setAttribute('data-depth',depth+1);
+
+      if(n.isOpen&&n.children&&n.children.length){
+        const shown=Math.min(n.children.length,treePageSize(n));
+        renderNodesInto(n.children.slice(0,shown),ch,depth+1);
+        if(shown<n.children.length)appendTreeMoreButton(ch,n,depth+1,shown,n.children.length);
       }
       frag.appendChild(ch);
     }else{
@@ -572,14 +615,22 @@ function renderNodesInto(nodes,container,depth){
       frag.appendChild(row);
     }
   }
-  if(nodes.length>_FOLDER_CHILD_CAP){
-    const more=document.createElement('div');more.className='muted';
-    more.style.cssText='padding:4px '+(8+depth*16)+'px;font-size:11px';
-    more.textContent='... and '+(nodes.length-_FOLDER_CHILD_CAP).toLocaleString()+' more items';
-    frag.appendChild(more);
-  }
   container.appendChild(frag);
 }
+
+function showMoreTreeItems(id,all){
+  const node=findNode(state.fileList,id);
+  if(!node||node.type!=='folder'||!node.children)return;
+  if(all){
+    node._treeVisibleCount=node.children.length;
+  }else{
+    node._treeVisibleCount=Math.min(node.children.length,treePageSize(node)+_TREE_PAGE_STEP);
+  }
+  renderExplorer();
+  const child=document.querySelector('[data-cid="'+id+'"]');
+  if(child)child.scrollIntoView({block:'nearest'});
+}
+
 function toggleFolderNode(id){
   const node=findNode(state.fileList,id);if(!node||node.type!=='folder')return;
   node.isOpen=!node.isOpen;
@@ -587,19 +638,13 @@ function toggleFolderNode(id){
   if(!ch){renderExplorer();return;}
   const row=ch.previousElementSibling;
   if(node.isOpen){
-    ch.classList.add('open');ch.innerHTML='';
+    ch.classList.add('open');
+    ch.innerHTML='';
     if(node.children&&node.children.length){
       const depth=parseInt(ch.getAttribute('data-depth'))||0;
-      let budget=Math.min(3000,_FOLDER_CHILD_CAP);
-      const prev=_treeBudgetRemaining;_treeBudgetRemaining=budget;
-      renderNodesInto(node.children,ch,depth);
-      _treeBudgetRemaining=prev;
-      if(node.children.length>budget){
-        const more=document.createElement('div');more.className='muted';
-        more.style.cssText='padding:4px '+(8+depth*16)+'px;font-size:11px';
-        more.textContent='... and '+(node.children.length-budget).toLocaleString()+' more items';
-        ch.appendChild(more);
-      }
+      const shown=Math.min(node.children.length,treePageSize(node));
+      renderNodesInto(node.children.slice(0,shown),ch,depth);
+      if(shown<node.children.length)appendTreeMoreButton(ch,node,depth,shown,node.children.length);
     }
     if(row&&row.children[0])row.children[0].textContent='📂';
   }else{
@@ -607,8 +652,22 @@ function toggleFolderNode(id){
     if(row&&row.children[0])row.children[0].textContent='📁';
   }
 }
+
 /* Event delegation for tree interactions — single listener instead of per-node handlers */
 var _documentTreeHandler=function(e){
+  const more=e.target.closest('#tree [data-tree-more]');
+  if(more){
+    e.stopPropagation();
+    showMoreTreeItems(more.getAttribute('data-tree-more'),false);
+    return;
+  }
+  const all=e.target.closest('#tree [data-tree-all]');
+  if(all){
+    e.stopPropagation();
+    showMoreTreeItems(all.getAttribute('data-tree-all'),true);
+    return;
+  }
+
   const btn=e.target.closest('#tree .tbtn button');
   if(btn){
     e.stopPropagation();
@@ -620,17 +679,29 @@ var _documentTreeHandler=function(e){
     if(v5){if(confirm('Delete this item?')){state.fileList=removeNode(state.fileList,v5);closeFile(v5);state.projectDirty=true;renderExplorer();renderStatusbar();}return;}
     return;
   }
+
   const item=e.target.closest('#tree .tree-item');
   if(item&&!e.target.closest('.tbtn')){
     const nid=item.getAttribute('data-nid');
-    if(nid){const nd=findNode(state.fileList,nid);if(nd){if(nd.type==='folder')toggleFolderNode(nid);else openNode(nd);}}
+    if(nid){
+      const nd=findNode(state.fileList,nid);
+      if(nd){if(nd.type==='folder')toggleFolderNode(nid);else openNode(nd);}
+    }
   }
 };
 document.addEventListener('click',_documentTreeHandler);
+
 function toggleAll(open){
   const maxD=open?3:999;
-  const w=(n,d)=>n.forEach(x=>{if(x.children){x.isOpen=d<maxD?open:false;w(x.children,d+1);}});
-  w(state.fileList,0);renderExplorer();
+  const w=(n,d)=>n.forEach(x=>{
+    if(x.children){
+      x.isOpen=d<maxD?open:false;
+      if(open)x._treeVisibleCount=Math.min(x.children.length,_TREE_PAGE_SIZE);
+      w(x.children,d+1);
+    }
+  });
+  w(state.fileList,0);
+  renderExplorer();
 }
 
 /* ---------- Monaco ---------- */
