@@ -110,7 +110,6 @@ Uninstall: open the **Extensions** panel and click **Uninstall** on any card.
 ban-code-editor/
 ├── index.html            ← the entire editor (open this)
 ├── extensions/           ← sample .json extensions & demo project
-│   ├── synthwave-theme.json
 │   ├── console-snippets.json
 │   ├── git-tools.json
 │   └── demo-project.json
