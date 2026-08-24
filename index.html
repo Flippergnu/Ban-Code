@@ -164,6 +164,12 @@
   /* Extensions */
   .dropzone{border:2px dashed var(--cardBorder);border-radius:8px;padding:18px;text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;transition:.15s}
   .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(0,122,204,.07);color:var(--fg)}
+  .import-progress{padding:24px;text-align:center;min-width:360px;max-width:500px}
+  .import-progress h3{margin-bottom:14px;font-size:15px}
+  .import-progress .bar-wrap{background:var(--inputBg);border-radius:6px;height:18px;overflow:hidden;margin:10px 0}
+  .import-progress .bar-fill{height:100%;background:var(--accent);border-radius:6px;transition:width .15s ease;min-width:0}
+  .import-progress .stats{font-size:12px;color:var(--dim);margin-top:8px}
+  .import-progress .btn-row{margin-top:16px;display:flex;gap:8px;justify-content:center}
   .ext-grid{display:flex;flex-direction:column;gap:10px}
   .ext-card{background:var(--card);border:1px solid var(--cardBorder);border-radius:8px;padding:12px;transition:border-color 0.2s ease,box-shadow 0.2s ease}
   .ext-card:hover{border-color:var(--dim);box-shadow:0 0 12px rgba(0,122,204,.08)}
@@ -196,6 +202,30 @@
   .manifest-card h4{color:var(--fg);font-size:13px;margin-bottom:6px}
   #dropmask{position:fixed;inset:0;background:rgba(0,122,204,.12);border:3px dashed var(--accent);z-index:6000;display:none;pointer-events:none}
   #dropmask .txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;font-weight:600}
+  /* Context Menu */
+  .ctx-menu{position:fixed;z-index:8000;background:var(--sidebar);border:1px solid var(--inputBorder);border-radius:6px;padding:4px 0;min-width:200px;max-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.55);animation:fadeSlideIn .1s ease;font-size:13px;user-select:none}
+  .ctx-menu .ctx-item{display:flex;align-items:center;gap:8px;padding:6px 14px;color:var(--fg);cursor:pointer;transition:background .08s ease}
+  .ctx-menu .ctx-item:hover{background:var(--selectBg);color:#fff}
+  .ctx-menu .ctx-item.danger{color:#e06c75}
+  .ctx-menu .ctx-item.danger:hover{background:#4a2b3a;color:#f0a0b0}
+  .ctx-menu .ctx-item .ctx-key{margin-left:auto;color:var(--dim);font-size:11px}
+  .ctx-menu .ctx-sep{height:1px;background:var(--border);margin:4px 8px}
+  .ctx-menu .ctx-label{padding:4px 14px 2px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+
+  /* Export progress */
+  .export-progress{padding:24px;text-align:center;min-width:380px;max-width:480px}
+  .export-progress h3{margin-bottom:14px;font-size:15px}
+  .export-progress .bar-wrap{background:var(--inputBg);border-radius:6px;height:18px;overflow:hidden;margin:10px 0}
+  .export-progress .bar-fill{height:100%;background:var(--accent);border-radius:6px;transition:width .15s ease;min-width:0}
+  .export-progress .stats{font-size:12px;color:var(--dim);margin-top:8px}
+  .export-progress .task-log{margin-top:12px;max-height:160px;overflow-y:auto;text-align:left;background:var(--bg);border:1px solid var(--cardBorder);border-radius:6px;padding:8px 10px;font-size:11px;font-family:ui-monospace,Consolas,monospace;color:var(--dim);line-height:1.6}
+  .export-progress .task-log .task-entry{padding:1px 0}
+  .export-progress .task-log .task-entry.done{color:#98c379}
+  .export-progress .task-log .task-entry.active{color:var(--accent)}
+  .export-progress .task-log .task-entry.error{color:#e06c75}
+  .export-progress .task-summary{margin-top:12px;text-align:left;background:var(--card);border:1px solid var(--cardBorder);border-radius:6px;padding:10px 14px;font-size:12px}
+  .export-progress .task-summary .sum-row{display:flex;justify-content:space-between;padding:2px 0;color:var(--fg)}
+  .export-progress .task-summary .sum-label{color:var(--dim)}
   .icon-btn{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--inputBg);color:var(--fg);font-size:15px}
   .icon-btn:hover{background:var(--hoverStrong)}
 </style>
@@ -241,12 +271,15 @@
   </div>
 </div>
 <div class="overlay" id="modal-overlay"><div class="modal" id="modal"></div></div>
+<div class="ctx-menu" id="ctx-menu" style="display:none"></div>
 <div id="toasts"></div>
-<div id="dropmask"><div class="txt">⬇ Drop a .json extension file to install</div></div>
+<div id="dropmask"><div class="txt" id="dropmask-txt">⬇ Drop files, folders, or .json extensions to import</div></div>
 
 <input type="file" id="install-ext-input" accept=".json,application/json" style="display:none" />
 <input type="file" id="load-project-input" accept=".json,application/json" style="display:none" />
 <input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none" />
+<input type="file" id="import-files-input" multiple style="display:none" />
+<input type="file" id="import-folder-into-input" webkitdirectory directory multiple style="display:none" />
 
 <script>
 /* =========================================================================
@@ -295,6 +328,8 @@ function persist(){LS.set('settings',state.settings);LS.set('extensions',state.e
 const persistSettings=()=>LS.set('settings',state.settings);
 
 let _termHeight=210; // remember terminal height across toggles
+var _pendingFileRefs=new Map(); // path->File for lazy loading
+var _pendingEntryRefs=new Map(); // path->FileSystemFileEntry for lazy loading
 
 /* ---------- file system ---------- */
 function findNode(nodes,id){for(const n of nodes){if(n.id===id)return n;if(n.children){const r=findNode(n.children,id);if(r)return r;}}return null;}
@@ -308,24 +343,35 @@ function defaultContent(name){const l=langFromName(name);
   if(l==='python')return '#'+name+'\n\n';
   return '';}
 function makeNode(name,type,parentPath){const id=uid();const node={id,name,type};if(type==='folder'){node.children=[];node.isOpen=true;}else{node.language=langFromName(name);node.content='';node.path=(parentPath?parentPath+'/':'')+name;}return node;}
-function createFile(name,content,language,parentId){
-  if(!state.fileList.length)return toast('Open a project first','info');
+function createFile(name,content,language,parentId,noRender){
+  if(!state.fileList.length&&!noRender)return toast('Open a project first','info');
   const parent=parentId?findNode(state.fileList,parentId):state.fileList[0];
   const node={id:uid(),name,type:'file',language:language||langFromName(name),content:content||defaultContent(name),path:(parent&&parent.type==='folder'?(parent.path?(parent.path+'/'):''):'')+name};
   if(parent&&parent.type==='folder')parent.children.push(node);else state.fileList.push(node);
-  state.projectDirty=true;openNode(node);renderExplorer();renderStatusbar();return node;}
-function createFolder(name,parentId){
-  if(!state.fileList.length)return toast('Open a project first','info');
+  state.projectDirty=true;if(!noRender){openNode(node);renderExplorer();renderStatusbar();}return node;}
+function createFolder(name,parentId,noRender){
+  if(!state.fileList.length&&!noRender)return null;
   const parent=parentId?findNode(state.fileList,parentId):state.fileList[0];
   const node={id:uid(),name,type:'folder',isOpen:true,children:[],path:(parent&&parent.type==='folder'?(parent.path?(parent.path+'/'):''):'')+name};
   if(parent&&parent.type==='folder')parent.children.push(node);else state.fileList.push(node);
-  state.projectDirty=true;renderExplorer();renderStatusbar();return node;}
+  state.projectDirty=true;if(!noRender){renderExplorer();renderStatusbar();}return node;}
 function openNode(node){
   if(node.type!=='file')return;
   let of=state.openFiles.find(f=>f.id===node.id);
   if(!of){of={id:node.id,name:node.name,content:node.content||'',language:node.language||'plaintext',path:node.path||node.name,modified:false};state.openFiles.push(of);}
   state.activeFileId=node.id;
-  renderTabs();renderEditor();renderStatusbar();setDocName(node.name);}
+  renderTabs();renderEditor();renderStatusbar();setDocName(node.name);
+  // Lazy load content from stored file/entry reference (for large project imports)
+  if(!node.content&&node.path){
+    if(_pendingFileRefs.has(node.path)){
+      const file=_pendingFileRefs.get(node.path);_pendingFileRefs.delete(node.path);
+      file.text().then(content=>{node.content=content;const f=state.openFiles.find(x=>x.id===node.id);if(f){f.content=content;if(state.activeFileId===node.id){const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(f.path||f.name));const m=monaco.editor.getModel(uri);if(m)m.setValue(content);else renderEditor();}}}).catch(()=>{});
+    }else if(_pendingEntryRefs.has(node.path)){
+      const entry=_pendingEntryRefs.get(node.path);_pendingEntryRefs.delete(node.path);
+      entry.file(file=>{if(file.size>_MAX_FILE_SIZE)return;file.text().then(content=>{node.content=content;const f=state.openFiles.find(x=>x.id===node.id);if(f){f.content=content;if(state.activeFileId===node.id){const uri=monaco.Uri.parse('inmemory://'+encodeURIComponent(f.path||f.name));const m=monaco.editor.getModel(uri);if(m)m.setValue(content);else renderEditor();}}}).catch(()=>{});});
+    }
+  }
+}
 function closeFile(id){
   const idx=state.openFiles.findIndex(f=>f.id===id);
   state.openFiles=state.openFiles.filter(f=>f.id!==id);
@@ -350,6 +396,7 @@ function renderWelcome(){
     +'<div class="actions">'
     +'<button class="btn primary" onclick="ui.newProject()">🆕 New Project</button>'
     +'<button class="btn" onclick="ui.loadProjectJson()">📂 Open JSON</button>'
+    +'<button class="btn" onclick="ui.importFolder()">📦 Import Folder</button>'
     +'<button class="btn" onclick="ui.installExtension()">🧩 Install Extension</button>'
     +'</div>'
     +'<div class="grid">'
@@ -385,6 +432,9 @@ document.addEventListener('click',e=>{
 });
 
 /* ---------- explorer ---------- */
+const _TREE_BUDGET=5000;
+const _FOLDER_CHILD_CAP=5000;
+let _treeBudgetRemaining=_TREE_BUDGET;
 function renderExplorer(){
   const body=$('#side-body');if(!body||state.activityView!=='explorer')return;
   body.innerHTML='<div class="sec-title">WORKSPACE</div>'
@@ -394,43 +444,105 @@ function renderExplorer(){
       ?'<div style="display:flex;gap:6px;flex-wrap:wrap">'
         +'<button class="btn sm" onclick="ui.newFile()">＋ File</button>'
         +'<button class="btn sm" onclick="ui.newFolder()">＋ Folder</button>'
+        +'<button class="btn sm" onclick="ui.importFilesInto()">📥 Files</button>'
+        +'<button class="btn sm" onclick="ui.importFolderInto()">📥 Folder</button>'
         +'<button class="btn sm" onclick="toggleAll(true)">⊞ All</button>'
         +'</div>'
-      :'<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="ui.newProject()">🆕 New</button><button class="btn sm" onclick="ui.loadProjectJson()">📂 Open</button></div>')
+      :'<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="ui.newProject()">🆕 New</button><button class="btn sm" onclick="ui.loadProjectJson()">📂 Open</button><button class="btn sm" onclick="ui.importFolder()">📦 Import Folder</button></div>')
     +'<button class="btn sm block" onclick="ui.saveProject()">💾 Download JSON</button>'
     +'<button class="btn sm block" onclick="ui.exportZip()">📦 Export as ZIP</button>';
   const tree=$('#tree');
   if(!state.fileList.length){tree.innerHTML='<div class="muted" style="padding:12px;text-align:center;font-size:12px">Empty workspace.<br>Create or open a project.</div>';return;}
-  tree.appendChild(renderNodes(state.fileList,0));
+  _treeBudgetRemaining=_TREE_BUDGET;
+  renderNodesInto(state.fileList,tree,0);
 }
-function renderNodes(nodes,depth){
-  const w=document.createElement('div');
-  nodes.forEach(n=>{
-    const row=document.createElement('div');row.className='tree-item';
+function renderNodesInto(nodes,container,depth){
+  if(_treeBudgetRemaining<=0)return;
+  const frag=document.createDocumentFragment();
+  const len=Math.min(nodes.length,_FOLDER_CHILD_CAP,_treeBudgetRemaining);
+  for(let i=0;i<len;i++){
+    _treeBudgetRemaining--;
+    const n=nodes[i];
+    const row=document.createElement('div');row.className='tree-item';row.setAttribute('data-nid',n.id);
     if(n.type==='folder'){
       row.innerHTML='<span>'+(n.isOpen?'📂':'📁')+'</span><span class="name">'+esc(n.name)+'</span>'
-        +'<span class="tbtn"><button data-nf="'+n.id+'" title="New file">＋</button><button data-nd="'+n.id+'" title="New folder">📁</button><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
+        +'<span class="tbtn"><button data-nf="'+n.id+'" title="New file">＋</button><button data-nd="'+n.id+'" title="New folder">📁</button><button data-if="'+n.id+'" title="Import files">📥</button><button data-idir="'+n.id+'" title="Import folder">📦</button><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
       row.style.paddingLeft=(8+depth*16)+'px';
-      row.onclick=e=>{if(e.target.closest('.tbtn'))return;n.isOpen=!n.isOpen;renderExplorer();};
+      frag.appendChild(row);
       const ch=document.createElement('div');ch.className='child'+(n.isOpen?' open':'');
-      ch.appendChild(renderNodes(n.children||[],depth+1));
-      w.appendChild(row);w.appendChild(ch);
+      ch.setAttribute('data-cid',n.id);ch.setAttribute('data-depth',depth+1);
+      if(n.isOpen&&n.children&&n.children.length&&_treeBudgetRemaining>0){
+        renderNodesInto(n.children,ch,depth+1);
+      }
+      frag.appendChild(ch);
     }else{
-      const active=n.id===state.activeFileId;
-      row.className+=(active?' active':'');
+      if(n.id===state.activeFileId)row.className+=' active';
       row.innerHTML='<span>'+fileIcon(n.name)+'</span><span class="name">'+esc(n.name)+'</span>'
         +'<span class="tbtn"><button data-rm="'+n.id+'" title="Delete">🗑</button></span>';
       row.style.paddingLeft=(8+depth*16)+'px';
-      row.onclick=()=>openNode(n);
-      w.appendChild(row);
+      frag.appendChild(row);
     }
-  });
-  $$('.tbtn [data-nf]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();ui.newFileAt(b.getAttribute('data-nf'));});
-  $$('.tbtn [data-nd]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();ui.newFolderAt(b.getAttribute('data-nd'));});
-  $$('.tbtn [data-rm]',w).forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.getAttribute('data-rm');if(confirm('Delete this item?')){state.fileList=removeNode(state.fileList,id);closeFile(id);state.projectDirty=true;renderExplorer();renderStatusbar();}});
-  return w;
+  }
+  if(nodes.length>_FOLDER_CHILD_CAP){
+    const more=document.createElement('div');more.className='muted';
+    more.style.cssText='padding:4px '+(8+depth*16)+'px;font-size:11px';
+    more.textContent='... and '+(nodes.length-_FOLDER_CHILD_CAP).toLocaleString()+' more items';
+    frag.appendChild(more);
+  }
+  container.appendChild(frag);
 }
-function toggleAll(open){const w=n=>n.forEach(x=>{if(x.children){x.isOpen=open;w(x.children);}});w(state.fileList);renderExplorer();}
+function toggleFolderNode(id){
+  const node=findNode(state.fileList,id);if(!node||node.type!=='folder')return;
+  node.isOpen=!node.isOpen;
+  const ch=document.querySelector('[data-cid="'+id+'"]');
+  if(!ch){renderExplorer();return;}
+  const row=ch.previousElementSibling;
+  if(node.isOpen){
+    ch.classList.add('open');ch.innerHTML='';
+    if(node.children&&node.children.length){
+      const depth=parseInt(ch.getAttribute('data-depth'))||0;
+      let budget=Math.min(3000,_FOLDER_CHILD_CAP);
+      const prev=_treeBudgetRemaining;_treeBudgetRemaining=budget;
+      renderNodesInto(node.children,ch,depth);
+      _treeBudgetRemaining=prev;
+      if(node.children.length>budget){
+        const more=document.createElement('div');more.className='muted';
+        more.style.cssText='padding:4px '+(8+depth*16)+'px;font-size:11px';
+        more.textContent='... and '+(node.children.length-budget).toLocaleString()+' more items';
+        ch.appendChild(more);
+      }
+    }
+    if(row&&row.children[0])row.children[0].textContent='📂';
+  }else{
+    ch.classList.remove('open');ch.innerHTML='';
+    if(row&&row.children[0])row.children[0].textContent='📁';
+  }
+}
+/* Event delegation for tree interactions — single listener instead of per-node handlers */
+var _documentTreeHandler=function(e){
+  const btn=e.target.closest('#tree .tbtn button');
+  if(btn){
+    e.stopPropagation();
+    const v=btn.getAttribute('data-nf');if(v){ui.newFileAt(v);return;}
+    const v2=btn.getAttribute('data-nd');if(v2){ui.newFolderAt(v2);return;}
+    const v3=btn.getAttribute('data-if');if(v3){ui.importFilesAt(v3);return;}
+    const v4=btn.getAttribute('data-idir');if(v4){ui.importFolderAt(v4);return;}
+    const v5=btn.getAttribute('data-rm');
+    if(v5){if(confirm('Delete this item?')){state.fileList=removeNode(state.fileList,v5);closeFile(v5);state.projectDirty=true;renderExplorer();renderStatusbar();}return;}
+    return;
+  }
+  const item=e.target.closest('#tree .tree-item');
+  if(item&&!e.target.closest('.tbtn')){
+    const nid=item.getAttribute('data-nid');
+    if(nid){const nd=findNode(state.fileList,nid);if(nd){if(nd.type==='folder')toggleFolderNode(nid);else openNode(nd);}}
+  }
+};
+document.addEventListener('click',_documentTreeHandler);
+function toggleAll(open){
+  const maxD=open?3:999;
+  const w=(n,d)=>n.forEach(x=>{if(x.children){x.isOpen=d<maxD?open:false;w(x.children,d+1);}});
+  w(state.fileList,0);renderExplorer();
+}
 
 /* ---------- Monaco ---------- */
 function initMonaco(){
@@ -625,7 +737,7 @@ function renderSidebar(){
 }
 
 /* ---------- search ---------- */
-function doSearch(q){const out=[];const walk=n=>{n.forEach(x=>{if(x.type==='file'&&x.content){x.content.split('\n').forEach((line,i)=>{if(line.toLowerCase().includes(q.toLowerCase()))out.push({fileId:x.id,line:i+1,content:line.trim()});});}if(x.children)walk(x.children);});};walk(state.fileList);return out;}
+function doSearch(q){const out=[];const walk=n=>{n.forEach(x=>{if(x.type==='file'&&x.content){try{x.content.split('\n').forEach((line,i)=>{if(line.toLowerCase().includes(q.toLowerCase()))out.push({fileId:x.id,line:i+1,content:line.trim()});});}catch(e){}}if(x.children)walk(x.children);});};walk(state.fileList);return out;}
 function escRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function mark(text,q){if(!q.trim())return esc(text);return esc(text).replace(new RegExp('('+escRegex(q)+')','gi'),'<mark class="mark">$1</mark>');}
 function renderSearch(body){
@@ -780,13 +892,116 @@ function installFromFile(file){
   reader.onload=()=>{try{const m=JSON.parse(reader.result);installExtension(m,file.name);}catch(e){toast('That JSON is not valid JSON: '+e.message,'error');}};
   reader.readAsText(file);
 }
-// drag & drop install anywhere
+// drag & drop: handle files, folders, and .json extensions
 let _dropC=0;
-document.addEventListener('dragover',e=>{e.preventDefault();_dropC++;$('#dropmask').style.display='block';});
+let _dropHasFolder=false;
+document.addEventListener('dragover',e=>{e.preventDefault();_dropC++;
+  // Check if any entry is a directory
+  _dropHasFolder=false;
+  if(e.dataTransfer&&e.dataTransfer.items){for(let i=0;i<e.dataTransfer.items.length;i++){if(e.dataTransfer.items[i].webkitGetAsEntry&&e.dataTransfer.items[i].webkitGetAsEntry().isDirectory){_dropHasFolder=true;break;}}}
+  const txt=$('#dropmask-txt');
+  if(txt)txt.textContent=_dropHasFolder?'⬇ Drop to import folder into project':'⬇ Drop files, folders, or .json extensions to import';
+  $('#dropmask').style.display='block';
+});
 document.addEventListener('dragleave',e=>{_dropC--;if(_dropC<=0){_dropC=0;$('#dropmask').style.display='none';}});
-document.addEventListener('drop',e=>{e.preventDefault();_dropC=0;$('#dropmask').style.display='none';
+document.addEventListener('drop',async e=>{e.preventDefault();_dropC=0;$('#dropmask').style.display='none';
+  // Handle directory drops via webkitGetAsEntry (async tree walker)
+  const items=e.dataTransfer&&e.dataTransfer.items;if(items){
+    const entries=[];for(let i=0;i<items.length;i++){const entry=items[i].webkitGetAsEntry&&items[i].webkitGetAsEntry();if(entry)entries.push(entry);}
+    const dirs=entries.filter(en=>en.isDirectory);
+    const plainFiles=entries.filter(en=>en.isFile);
+    if(dirs.length>0){
+      // Import first directory as folder into project (or as new project if none open)
+      if(!state.fileList.length){
+        // No project open — use DataTransferItem.getFilesAndDirectories() fallback or traditional webkitRelativePath approach
+        // Unfortunately getAsEntry() doesn't give us webkitRelativePath, so we need the file input approach for folder import
+        toast('For folder import, use File > Import Folder or drag a folder while a project is open','info',4000);
+      }else{
+        // Read directory entries recursively
+        const rootId=state.fileList[0].id;
+        for(const dir of dirs){
+          await importDirectoryEntry(dir,rootId);
+        }
+      }
+      // Also handle any loose files dropped alongside
+      if(plainFiles.length>0&&state.fileList.length){
+        const filePromises=plainFiles.map(en=>new Promise(r=>en.file(f=>r(f))));
+        const files=await Promise.all(filePromises);
+        await importFilesIntoNode(files,rootId);
+      }
+    }else if(plainFiles.length>0){
+      // Only loose files — check if any are .json extensions
+      const filePromises=plainFiles.map(en=>new Promise(r=>en.file(f=>r(f))));
+      const files=await Promise.all(filePromises);
+      const jsonFiles=files.filter(f=>/\.json$/i.test(f.name)||f.type==='application/json');
+      const nonJsonFiles=files.filter(f=>!(/\.json$/i.test(f.name)||f.type==='application/json'));
+      // Install .json extensions
+      jsonFiles.forEach(f=>installFromFile(f));
+      // Import non-json files into project
+      if(nonJsonFiles.length>0){
+        if(!state.fileList.length){toast('Open or create a project first to import files','info');}
+        else{await importFilesIntoNode(nonJsonFiles,state.fileList[0].id);}
+      }
+    }
+    return;
+  }
+  // Fallback: basic file list (no entries API)
   const files=Array.from(e.dataTransfer.files||[]);
-  files.forEach(f=>{if(/\.json$/i.test(f.name)||f.type==='application/json')installFromFile(f);else toast('Only .json extension files can be installed: '+f.name,'error');});});
+  if(!files.length)return;
+  const jsonFiles=files.filter(f=>/\.json$/i.test(f.name)||f.type==='application/json');
+  const nonJsonFiles=files.filter(f=>!/\.json$/i.test(f.name)&&f.type!=='application/json');
+  jsonFiles.forEach(f=>installFromFile(f));
+  if(nonJsonFiles.length>0){
+    if(!state.fileList.length){toast('Open or create a project first to import files','info');}
+    else{await importFilesIntoNode(nonJsonFiles,state.fileList[0].id);}
+  }
+});
+
+/* Recursively read a FileSystemDirectoryEntry and import into a folder node */
+async function importDirectoryEntry(dirEntry,parentId,_isTop){
+  const prog=(_isTop!==false)?showImportProgress('Reading directory "'+dirEntry.name+'"...'):null;
+  const reader=dirEntry.createReader();
+  let allEntries=[];
+  let batch;
+  do{batch=await new Promise((res,rej)=>{reader.readEntries(res,rej);});allEntries=allEntries.concat(batch);}while(batch.length>0);
+  // Create folder node directly (avoids renderExplorer call from createFolder)
+  const parent=parentId?findNode(state.fileList,parentId):null;
+  const pPath=parent?(parent.path||parent.name):'';
+  const folderNode={id:uid(),name:dirEntry.name,type:'folder',isOpen:false,children:[],path:pPath?pPath+'/'+dirEntry.name:dirEntry.name};
+  if(parent&&parent.type==='folder'){if(!parent.children)parent.children=[];parent.children.push(folderNode);}else{state.fileList.push(folderNode);}
+  let processed=0,skipped=0,total=allEntries.length;
+  const lazyMode=total>_LAZY_THRESHOLD;
+  for(const entry of allEntries){
+    if(prog&&prog.isCancelled())break;
+    if(entry.isDirectory){
+      await importDirectoryEntry(entry,folderNode.id,false);
+    }else if(entry.isFile){
+      if(isLikelyBinary(entry.name)){skipped++;processed++;if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');continue;}
+      try{
+        const file=await new Promise((res,rej)=>{entry.file(res,rej);});
+        if(file.size>_MAX_FILE_SIZE){skipped++;processed++;if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');continue;}
+        if(lazyMode){
+          const fp=folderNode.path+'/'+entry.name;
+          folderNode.children.push({id:uid(),name:entry.name,type:'file',language:langFromName(entry.name),content:'',path:fp});
+          _pendingEntryRefs.set(fp,entry);
+        }else{
+          const content=await file.text();
+          folderNode.children.push({id:uid(),name:entry.name,type:'file',language:langFromName(entry.name),content:content,path:folderNode.path+'/'+entry.name});
+        }
+      }catch(e){skipped++;}
+    }
+    processed++;
+    if(prog)prog.update(processed/total*100,'Processed '+processed+'/'+total+' ('+skipped+' skipped)');
+    if(processed%50===0)await yieldToUI();
+  }
+  folderNode.children.sort((a,b)=>{if(a.type!==b.type)return a.type==='folder'?-1:1;return a.name.localeCompare(b.name);});
+  if(_isTop!==false){
+    state.projectDirty=true;renderExplorer();renderStatusbar();
+    if(prog)prog.done();
+    const added=processed-skipped;
+    toast('Imported "'+dirEntry.name+'" ('+added+' files'+(skipped?', '+skipped+' skipped':'')+')'+(lazyMode?' — contents load on demand when you open files':''),'success',lazyMode?5000:3000);
+  }
+}
 function openExtensionsPanel(){state.activityView='extensions';state.sidebarVisible=true;renderActivityBar();renderSidebar();}
 
 /* ---------- settings ---------- */
@@ -828,6 +1043,8 @@ function buildMenus(){
       ['New Project','Ctrl+N','🆕',()=>ui.newProject()],
       ['Open JSON...','','📂',()=>ui.loadProjectJson()],
       ['Import Folder as Project...','','📦',()=>ui.importFolder()],
+      ['Import Files into Project...','','📥',()=>ui.importFilesInto()],
+      ['Import Folder into Project...','','📥',()=>ui.importFolderInto()],
       ['Download JSON','Ctrl+Shift+S','💾',()=>ui.saveProject()],
       ['SEP'],
       ['New File','','＋',()=>ui.newFile()],
@@ -906,7 +1123,7 @@ function buildPalette(q){
   let items=[];
   if(_palMode==='cmd'){
     items=[
-      {t:'New Project',d:'Ctrl+N',p:()=>ui.newProject()},{t:'Open JSON',p:()=>ui.loadProjectJson()},{t:'Import Folder',p:()=>ui.importFolder()},{t:'Download JSON',d:'Ctrl+Shift+S',p:()=>ui.saveProject()},
+      {t:'New Project',d:'Ctrl+N',p:()=>ui.newProject()},{t:'Open JSON',p:()=>ui.loadProjectJson()},{t:'Import Folder as Project',p:()=>ui.importFolder()},{t:'Import Files into Project',p:()=>ui.importFilesInto()},{t:'Import Folder into Project',p:()=>ui.importFolderInto()},{t:'Download JSON',d:'Ctrl+Shift+S',p:()=>ui.saveProject()},
       {t:'New File',p:()=>ui.newFile()},{t:'New Folder',p:()=>ui.newFolder()},
       {t:'Save File',d:'Ctrl+S',p:()=>ui.save()},{t:'Export as ZIP',p:()=>ui.exportZip()},{t:'Install Extension',p:()=>ui.installExtension()},
       {t:'Toggle Terminal',d:'Ctrl+`',p:()=>toggleTerminal()},{t:'Toggle Sidebar',d:'Ctrl+B',p:()=>ui.toggleSidebar()},
@@ -945,8 +1162,8 @@ $('#palette-overlay').addEventListener('click',e=>{if(e.target.id==='palette-ove
 
 /* ---------- modal ---------- */
 function openModal(html){$('#modal').innerHTML=html;$('#modal-overlay').classList.add('open');}
-function closeModal(){$('#modal-overlay').classList.remove('open');}
-$('#modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay')closeModal();});
+function closeModal(){if(_modalLocked)return;$('#modal-overlay').classList.remove('open');}
+$('#modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay'&&!_modalLocked)closeModal();});
 
 /* ---------- file io (open/save/export) ---------- */
 const ui={
@@ -958,6 +1175,10 @@ const ui={
   installExtension(){$('#install-ext-input').click();},
   loadProjectJson(){$('#load-project-input').click();},
   importFolder(){$('#import-folder-input').click();},
+  importFilesInto(){if(!state.fileList.length){toast('Open or create a project first','info');return;}$('#import-files-input').click();},
+  importFolderInto(){if(!state.fileList.length){toast('Open or create a project first','info');return;}$('#import-folder-into-input').click();},
+  importFilesAt(folderId){$('#import-files-input').setAttribute('data-target-folder',folderId);$('#import-files-input').click();},
+  importFolderAt(folderId){$('#import-folder-into-input').setAttribute('data-target-folder',folderId);$('#import-folder-into-input').click();},
   saveProject(){if(!state.fileList.length){toast('No project open','info');return;}const root=state.fileList[0];state.openFiles.forEach(f=>{const n=findNode(state.fileList,f.id);if(n)n.content=f.content;});const proj=state.projectJson||{name:root.name,version:'1.0.0'};proj.files=flattenProject(root.children,root.name);const json=JSON.stringify(proj,null,2);download(proj.name+'.json',json);state.projectJson=proj;state.projectDirty=false;state.openFiles.forEach(f=>{f.modified=false;});renderTabs();renderStatusbar();toast('Downloaded '+proj.name+'.json','success');},
   save(){
     const f=currentOpen();if(!f)return toast('No file open','info');
@@ -979,7 +1200,8 @@ const ui={
     +'Ctrl+`       Terminal\nCtrl+B       Sidebar\n'
     +'Ctrl+Shift+P Command Palette\nCtrl+P       Quick Open\n'
     +'Ctrl+Shift+F Search\nCtrl+Shift+X Extensions\n'
-    +'Ctrl+,       Settings\nCtrl+= / Ctrl+- Zoom\n</div><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
+    +'Ctrl+,       Settings\nCtrl+= / Ctrl+- Zoom\n'
+    +'Tip: Use File menu or Command Palette to import folders & files</div><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
   about(){toast('🚫 Ban Code v2.0 — extension-powered editor','info');openModal('<h2>🚫 Ban Code v2.0</h2><p>A lightweight, extension-powered code editor that runs in a single HTML file.<br>Extensions are plain .json files you can install and uninstall.</p><div class="row"><button class="btn" onclick="ui.closeModal()">Close</button></div>');},
   exec(a){if(a==='undo'&&state.editor)state.editor.trigger('','undo');if(a==='redo'&&state.editor)state.editor.trigger('','redo');if(a==='find'&&state.editor)state.editor.trigger('','actions.find');if(a==='replace'&&state.editor)state.editor.trigger('','editor.action.startFindReplaceAction');},
   zoom(d){const n=Math.max(8,Math.min(40,(state.settings.fontSize||14)+d));state.settings.fontSize=n;persistSettings();applyEditorSettings();renderStatusbar();
@@ -987,7 +1209,7 @@ const ui={
   resetZoom(){state.settings.fontSize=14;persistSettings();applyEditorSettings();renderStatusbar();
     const fontInput=$('#st-font');if(fontInput)fontInput.value=14;},
   resetSettings(){resetSettings();},
-  closeModal(){closeModal();},
+  closeModal(){_modalLocked=false;closeModal();},
   clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.settings={theme:'ban-dark',fontSize:14,tabSize:2,wordWrap:true,minimap:true,lineNumbers:true,bracketPairColorization:true,cursorBlinking:'smooth'};if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildSnippets();rebuildKeybindings();rebuildCommands();buildMenus();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
   exportZip(){exportZip();},
 };
@@ -1084,14 +1306,35 @@ function collectFiles(nodes,base){
 
 async function exportZip(){
   if(!state.fileList.length)return toast('Nothing to export','info');
+  const rootName=state.fileList[0]&&state.fileList[0].name||'project';
+  let totalCount=0;
+  (function cnt(ns){ns.forEach(function(n){if(n.type==='folder'&&n.children)cnt(n.children);else totalCount++;});})(state.fileList);
+  const prog=showExportProgress('Exporting "'+rootName+'"',totalCount);
+  const t0=performance.now();
   try{
-    const files=collectFiles(state.fileList,null);
-    const blob=await nativeZip(files);
+    prog.logTask('Collecting file list...','active');
+    const files=await collectFilesAsync(state.fileList,null,function(count){prog.update(Math.round(count/totalCount*10),'Collecting files: '+count.toLocaleString()+' / '+totalCount.toLocaleString());});
+    if(prog.isCancelled()){prog.done();toast('Export cancelled','info');return;}
+    prog.logTask('Collected '+files.length.toLocaleString()+' files ('+Math.round(performance.now()-t0)+'ms)','done');
+    prog.update(10,'Compressing '+files.length.toLocaleString()+' files...');
+    const blob=await nativeZipChunked(files,prog);
+    if(prog.isCancelled()){prog.done();toast('Export cancelled','info');return;}
+    prog.update(100,'Done!');
+    const elapsed=((performance.now()-t0)/1000).toFixed(1);
+    const sizeMB=(blob.size/(1024*1024)).toFixed(2);
+    prog.showSummary([{label:'Files',value:files.length.toLocaleString()},{label:'ZIP Size',value:sizeMB+' MB'},{label:'Time',value:elapsed+'s'}]);
+    prog.logTask('Download starting...','done');
+    await new Promise(function(r){setTimeout(r,600);});
     const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=(state.fileList[0]&&state.fileList[0].name||'project')+'.zip';
+    const a=document.createElement('a');a.href=url;a.download=rootName+'.zip';
     a.click();URL.revokeObjectURL(url);
-    toast('Exported ZIP ('+files.length+' files)','success');
-  }catch(e){toast('ZIP export failed: '+e.message,'error');}
+    prog.done();
+    toast('Exported ZIP ('+files.length.toLocaleString()+' files, '+sizeMB+' MB, '+elapsed+'s)','success',4000);
+  }catch(e){
+    if(e.message==='Cancelled'){prog.done();toast('Export cancelled','info');return;}
+    prog.logTask('Error: '+e.message,'error');prog.done();
+    toast('ZIP export failed: '+e.message,'error');
+  }
 }
 
 function flattenProject(nodes,path){
@@ -1105,37 +1348,189 @@ function flattenProject(nodes,path){
 }
 
 /* ---------- file input handlers ---------- */
+
+/* Binary file extensions to skip during import */
+const _BIN_EXTS=new Set(['png','jpg','jpeg','gif','bmp','ico','webp','svg','tiff','tif','avif','mp4','mp3','wav','ogg','webm','avi','mov','mkv','flac','aac','m4a','wma','wmv','flv','zip','tar','gz','bz2','xz','7z','rar','iso','dmg','exe','dll','so','dylib','bin','dat','pdb','class','jar','war','ear','woff','woff2','ttf','otf','eot','ico','icns','pdf','doc','docx','xls','xlsx','ppt','pptx','psd','ai','sketch','fig','sqlite','db','sqlite3']);
+const _MAX_FILE_SIZE=2*1024*1024; // 2MB per file
+const _IMPORT_CHUNK=100; // process 100 files per yield
+const _LAZY_THRESHOLD=3000; // above this file count, skip content reading (structure-only import)
+const _MAX_PROJECT_FILES=500000; // absolute hard limit for project file count
+
+/* Show a progress modal, returns {update(pct,stats),done(),isCancelled()} */
+let _importCancelFlag=false;
+function showImportProgress(title){
+  _importCancelFlag=false;
+  openModal('<div class="import-progress"><h3>'+esc(title)+'</h3>'
+    +'<div class="bar-wrap"><div class="bar-fill" id="import-bar" style="width:0%"></div></div>'
+    +'<div class="stats" id="import-stats">Preparing...</div>'
+    +'<div class="btn-row"><button class="btn sm danger" onclick="_importCancelFlag=true">Cancel</button></div>'
+    +'</div>');
+  return {
+    update(pct,stats){const b=$('#import-bar');const s=$('#import-stats');if(b)b.style.width=Math.round(pct)+'%';if(s)s.textContent=stats;},
+    done(){closeModal();},
+    isCancelled(){return _importCancelFlag;}
+  };
+}
+
+/* Check if a file is likely binary based on extension */
+function isLikelyBinary(name){const ext=(name.includes('.')?name.split('.').pop().toLowerCase():'');return _BIN_EXTS.has(ext);}
+
+/* Yield to the event loop so the UI can repaint */
+function yieldToUI(){return new Promise(r=>setTimeout(r,0));}
+
+/* Read file entries with Map-based O(1) folder lookup and structure-only mode for large projects.
+   Returns {tree, skipped, total, lazy} */
+async function readFolderEntries(files, progress, rootName){
+  const total=files.length;
+  if(total>_MAX_PROJECT_FILES){
+    progress.update(100,'Too many files ('+total.toLocaleString()+'). Limit is '+(_MAX_PROJECT_FILES/1000)+'K.');
+    return {tree:{type:'folder',name:rootName,children:[]},skipped:total,total,lazy:true};
+  }
+  const root={type:'folder',name:rootName,children:[]};
+  const lazyMode=total>_LAZY_THRESHOLD;
+  const folderMap=new Map();
+  folderMap.set('',root.children);
+  let read=0,skipped=0;
+  for(let i=0;i<total;i++){
+    if(progress.isCancelled())break;
+    const f=files[i];
+    const parts=f.webkitRelativePath.split('/');
+    parts.shift();
+    if(isLikelyBinary(f.name)){skipped++;read++;if(read%200===0){progress.update(read/total*100,'Scanned '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');await yieldToUI();}continue;}
+    if(f.size>_MAX_FILE_SIZE){skipped++;read++;if(read%200===0){progress.update(read/total*100,'Scanned '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');await yieldToUI();}continue;}
+    let cur=root.children;
+    const fp=[];
+    for(let j=0;j<parts.length-1;j++){
+      fp.push(parts[j]);
+      const key=fp.join('/');
+      let arr=folderMap.get(key);
+      if(!arr){
+        const d={type:'folder',name:parts[j],children:[]};
+        cur.push(d);
+        folderMap.set(key,d.children);
+        arr=d.children;
+      }
+      cur=arr;
+    }
+    if(lazyMode){
+      const fp=rootName+'/'+parts.join('/');
+      cur.push({type:'file',name:parts[parts.length-1],content:''});
+      _pendingFileRefs.set(fp,f);
+    }else{
+      try{const content=await f.text();cur.push({type:'file',name:parts[parts.length-1],content:content});}
+      catch(e){skipped++;}
+    }
+    read++;
+    if(read%200===0){
+      progress.update(read/total*100,(lazyMode?'Scanning':'Reading')+' '+read.toLocaleString()+'/'+total.toLocaleString()+' ('+skipped+' skipped)');
+      await yieldToUI();
+    }
+  }
+  progress.update(100,'Done — '+read.toLocaleString()+' files'+(lazyMode?' scanned':' read')+', '+skipped+' skipped');
+  return {tree:root,skipped,total,lazy:lazyMode};
+}
+
+/* Build flat file list for JSON project format */
+function treeToFlat(nodes,basePath){
+  const out=[];
+  (nodes||[]).forEach(n=>{
+    const p=basePath?(basePath+'/'+n.name):n.name;
+    if(n.type==='folder'){out.push({type:'folder',name:n.name,children:treeToFlat(n.children,p)});}
+    else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
+  });
+  return out;
+}
+
+/* Import a folder as a brand new project (replaces current project) */
 $('#import-folder-input').addEventListener('change',async e=>{
   const files=Array.from(e.target.files||[]);if(!files.length)return;
-  const rootName=files[0].webkitRelativePath.split('/')[0]||'imported-project';
-  toast('Importing folder "'+rootName+'"...','info');
-  // Build nested tree from flat file list
-  const root={type:'folder',name:rootName,children:[]};
-  for(const f of files){
-    const parts=f.webkitRelativePath.split('/');parts.shift();
-    let cur=root.children;
-    for(let i=0;i<parts.length-1;i++){let d=cur.find(c=>c.type==='folder'&&c.name===parts[i]);if(!d){d={type:'folder',name:parts[i],children:[]};cur.push(d);}cur=d.children;}
-    const content=await f.text();
-    cur.push({type:'file',name:parts[parts.length-1],content:content});
-  }
-  // Build flat file list for JSON project format
-  function toFlat(nodes,basePath){
-    const out=[];
-    (nodes||[]).forEach(n=>{
-      const p=basePath?(basePath+'/'+n.name):n.name;
-      if(n.type==='folder'){out.push({type:'folder',name:n.name,children:toFlat(n.children,p)});}
-      else{out.push({type:'file',name:n.name,content:n.content||'',path:p});}
-    });
-    return out;
-  }
-  const proj={name:rootName,version:'1.0.0',files:toFlat(root.children,rootName)};
-  state.fileList=[{id:uid(),name:rootName,type:'folder',isOpen:true,children:buildNodeTree(proj.files,rootName),path:rootName}];
-  state.projectJson=proj;state.projectDirty=false;
-  renderExplorer();renderStatusbar();
-  download(rootName+'.json',JSON.stringify(proj,null,2));
-  toast('Imported "'+rootName+'" ('+files.length+' files) — saved as '+rootName+'.json','success');
   e.target.value='';
+  const rootName=files[0].webkitRelativePath.split('/')[0]||'imported-project';
+  const prog=showImportProgress('Importing "'+rootName+'"...');
+  try{
+    const result=await readFolderEntries(files,prog,rootName);
+    if(prog.isCancelled()){prog.done();toast('Import cancelled','info');return;}
+    const {tree,lazy}=result;
+    if(files.length>_MAX_PROJECT_FILES){prog.done();toast('Project has '+files.length.toLocaleString()+' files — exceeds limit. Only structure imported.','error',5000);
+      const flat=treeToFlat(tree.children,rootName);state.fileList=[{id:uid(),name:rootName,type:'folder',isOpen:false,children:buildNodeTree(flat,rootName,false),path:rootName}];renderExplorer();return;}
+    const flat=treeToFlat(tree.children,rootName);
+    const proj={name:rootName,version:'1.0.0',files:flat};
+    if(state.editor){state.editor.dispose();state.editor=null;}
+    state.openFiles=[];state.activeFileId=null;
+    state.fileList=[{id:uid(),name:rootName,type:'folder',isOpen:false,children:buildNodeTree(flat,rootName,false),path:rootName}];
+    state.projectJson=proj;state.projectDirty=false;
+    renderExplorer();renderTabs();renderStatusbar();renderEditor();
+    if(files.length<=500&&!lazy){download(rootName+'.json',JSON.stringify(proj,null,2));}
+    const msg='Imported "'+rootName+'" ('+files.length.toLocaleString()+' files'+(result.skipped?', '+result.skipped.toLocaleString()+' skipped':'')+')';
+    toast(msg+(lazy?' — contents load on demand when you open files':''),'success',lazy?5000:3000);
+  }catch(err){toast('Import failed: '+err.message,'error');}
+  prog.done();
 });
+
+/* Import files into the root of the current project (or a specific folder) */
+$('#import-files-input').addEventListener('change',async e=>{
+  const files=Array.from(e.target.files||[]);if(!files.length)return;
+  e.target.value='';
+  const targetId=$('#import-files-input').getAttribute('data-target-folder');
+  $('#import-files-input').removeAttribute('data-target-folder');
+  if(!state.fileList.length){toast('Open or create a project first','info');return;}
+  const parentId=targetId||state.fileList[0].id;
+  await importFilesIntoNode(files,parentId);
+});
+
+/* Import a folder into the root of the current project (or a specific folder) */
+$('#import-folder-into-input').addEventListener('change',async e=>{
+  const files=Array.from(e.target.files||[]);if(!files.length)return;
+  e.target.value='';
+  const targetId=$('#import-folder-into-input').getAttribute('data-target-folder');
+  $('#import-folder-into-input').removeAttribute('data-target-folder');
+  if(!state.fileList.length){toast('Open or create a project first','info');return;}
+  const rootName=files[0].webkitRelativePath.split('/')[0]||'imported-folder';
+  const parentId=targetId||state.fileList[0].id;
+  await importFolderIntoNode(files,rootName,parentId);
+});
+
+/* Generic: import loose files into a folder node */
+async function importFilesIntoNode(files,parentId){
+  const parent=findNode(state.fileList,parentId);
+  if(!parent||parent.type!=='folder'){toast('Target folder not found','error');return;}
+  const prog=showImportProgress('Importing '+files.length+' file'+(files.length>1?'s':'')+'...');
+  let added=0,skipped=0;
+  for(let i=0;i<files.length;i++){
+    if(prog.isCancelled())break;
+    const f=files[i];
+    if(isLikelyBinary(f.name)||f.size>_MAX_FILE_SIZE){skipped++;prog.update(i/files.length*100,'Processed '+i+'/'+files.length+' ('+skipped+' skipped)');continue;}
+    try{
+      const content=await f.text();
+      const node=createFile(f.name,content,null,parentId,true);
+      if(node)added++;
+    }catch(e){skipped++;}
+    prog.update((i+1)/files.length*100,'Processed '+(i+1)+'/'+files.length+' ('+skipped+' skipped)');
+    if(i%_IMPORT_CHUNK===0)await yieldToUI();
+  }
+  state.projectDirty=true;
+  renderExplorer();renderStatusbar();
+  prog.done();
+  toast('Imported '+added+' file'+(added!==1?'s':'')+(skipped?', '+skipped+' skipped':''),'success');
+}
+
+/* Generic: import a folder tree into a folder node */
+async function importFolderIntoNode(files,folderName,parentId){
+  const parent=findNode(state.fileList,parentId);
+  if(!parent||parent.type!=='folder'){toast('Target folder not found','error');return;}
+  const prog=showImportProgress('Importing folder "'+folderName+'"...');
+  const result=await readFolderEntries(files,prog,folderName);
+  if(prog.isCancelled()){prog.done();toast('Import cancelled','info');return;}
+  // Merge the imported tree into the parent
+  const newNodes=buildNodeTree(treeToFlat(result.tree.children,folderName),folderName,result.total>_LAZY_THRESHOLD?false:true);
+  const folderNode={id:uid(),name:folderName,type:'folder',isOpen:false,children:newNodes,path:parent.path?parent.path+'/'+folderName:folderName};
+  if(!parent.children)parent.children=[];
+  parent.children.push(folderNode);
+  state.projectDirty=true;
+  renderExplorer();renderStatusbar();
+  prog.done();
+  toast('Imported "'+folderName+'" ('+result.total+' files'+(result.skipped?', '+result.skipped+' skipped':'')+')','success');
+}
 $('#install-ext-input').addEventListener('change',e=>{
   const files=Array.from(e.target.files||[]);
   files.forEach(f=>{if(/\.json$/i.test(f.name))installFromFile(f);else toast('Only .json extension files: '+f.name,'error');});
@@ -1147,7 +1542,150 @@ $('#load-project-input').addEventListener('change',e=>{
   r.onload=()=>{try{const t=JSON.parse(r.result);if(t&&t.files&&Array.isArray(t.files)){let fl=t.files;if(fl.length>=1&&fl[0].type==='folder'&&fl[0].name===(t.name||'project')){fl=fl[0].children||[];}state.fileList=[{id:uid(),name:t.name||'project',type:'folder',isOpen:true,children:buildNodeTree(fl,t.name||'project'),path:t.name||'project'}];state.projectJson=t;state.projectDirty=false;renderExplorer();renderStatusbar();toast('Loaded project "'+(t.name||'project')+'"','success');}else if(t&&t.contributes){installExtension(t,f.name);}else{toast('JSON is neither a project nor an extension manifest','error');}}catch(err){toast('Invalid JSON: '+err.message,'error');}};
   r.readAsText(f);e.target.value='';
 });
-function buildNodeTree(arr,parentPath){return arr.map(item=>{if(item.type==='folder'){const p=parentPath?parentPath+'/'+item.name:item.name;return{id:uid(),name:item.name,type:'folder',isOpen:true,children:buildNodeTree(item.children||[],p),path:p};}return{id:uid(),name:item.name,type:'file',language:langFromName(item.name),content:item.content||'',path:item.path||item.name};});}
+function buildNodeTree(arr,parentPath,open){if(open===undefined)open=arr.length<100;return arr.map(item=>{if(item.type==='folder'){const p=parentPath?parentPath+'/'+item.name:item.name;return{id:uid(),name:item.name,type:'folder',isOpen:open,children:buildNodeTree(item.children||[],p,open),path:p};}return{id:uid(),name:item.name,type:'file',language:langFromName(item.name),content:item.content||'',path:item.path||item.name};});}
+
+/* ---------- Right-click context menu ---------- */
+var _ctxNodeId=null;
+var _ctxNode=null;
+function hideCtxMenu(){var m=$('#ctx-menu');if(m)m.style.display='none';_ctxNodeId=null;_ctxNode=null;}
+document.addEventListener('click',function(e){if(!e.target.closest('#ctx-menu'))hideCtxMenu();});
+document.addEventListener('contextmenu',function(e){
+  var treeItem=e.target.closest('#tree .tree-item');
+  if(treeItem){
+    e.preventDefault();
+    var nid=treeItem.getAttribute('data-nid');
+    if(!nid)return;
+    _ctxNodeId=nid;_ctxNode=findNode(state.fileList,nid);
+    if(!_ctxNode)return;
+    showCtxMenu(e.clientX,e.clientY,_ctxNode);
+  }else if(e.target.closest('#tree')&&state.fileList.length){
+    /* Right-click on empty tree space - show root folder menu */
+    e.preventDefault();
+    _ctxNodeId=state.fileList[0].id;_ctxNode=state.fileList[0];
+    showCtxMenu(e.clientX,e.clientY,state.fileList[0]);
+  }else{hideCtxMenu();}
+});
+function showCtxMenu(x,y,node){
+  var m=$('#ctx-menu');if(!m)return;
+  var isFolder=node.type==='folder';
+  var isFile=!isFolder;
+  var h='';
+  if(isFolder){
+    h+='<div class="ctx-label">Folder</div>';
+    h+='<div class="ctx-item" onclick="ui.newFileAt(\''+node.id+'\')">＋ New File</div>';
+    h+='<div class="ctx-item" onclick="ui.newFolderAt(\''+node.id+'\')">📁 New Folder</div>';
+    h+='<div class="ctx-sep"></div>';
+    h+='<div class="ctx-item" onclick="ui.importFilesAt(\''+node.id+'\')">📥 Import Files</div>';
+    h+='<div class="ctx-item" onclick="ui.importFolderAt(\''+node.id+'\')">📦 Import Folder</div>';
+    h+='<div class="ctx-sep"></div>';
+  }else{
+    h+='<div class="ctx-label">File</div>';
+    h+='<div class="ctx-item" onclick="ctxOpenFile()">📝 Open</div>';
+  }
+  h+='<div class="ctx-item" onclick="ctxRename()">✏️ Rename</div>';
+  h+='<div class="ctx-item" onclick="ctxDuplicate()">📋 Duplicate</div>';
+  if(isFile){h+='<div class="ctx-item" onclick="ctxCopyPath()">🔗 Copy Path</div>';}
+  h+='<div class="ctx-sep"></div>';
+  h+='<div class="ctx-item danger" onclick="ctxDelete()">🗑️ Delete</div>';
+  m.innerHTML=h;
+  m.style.display='block';
+  m.style.left='0px';m.style.top='0px';
+  var rect=m.getBoundingClientRect();
+  var mx=x,my=y;
+  if(x+rect.width>window.innerWidth)mx=window.innerWidth-rect.width-4;
+  if(y+rect.height>window.innerHeight)my=window.innerHeight-rect.height-4;
+  if(mx<0)mx=0;if(my<0)my=0;
+  m.style.left=mx+'px';m.style.top=my+'px';
+}
+function ctxOpenFile(){if(_ctxNode&&_ctxNode.type==='file')openNode(_ctxNode);hideCtxMenu();}
+function ctxRename(){
+  if(!_ctxNode)return;
+  var newName=prompt('Rename:',_ctxNode.name);
+  if(!newName||!newName.trim()||newName.trim()===_ctxNode.name)return;
+  _ctxNode.name=newName.trim();
+  if(_ctxNode.type==='file'){_ctxNode.language=langFromName(_ctxNode.name);var f=state.openFiles.find(function(x){return x.id===_ctxNode.id;});if(f)f.name=_ctxNode.name;}
+  if(_ctxNode.type==='file')_ctxNode.path=_ctxNode.path?_ctxNode.path.replace(/[^/]+$/,newName.trim()):newName.trim();
+  state.projectDirty=true;renderExplorer();renderTabs();hideCtxMenu();
+}
+function ctxDuplicate(){
+  if(!_ctxNode)return;
+  if(_ctxNode.type==='file'){createFile(_ctxNode.name.replace(/(\.[^.]+)$/, '-copy$1'),_ctxNode.content||'',_ctxNode.language);}
+  else{toast('Folder duplication not yet supported','info');}
+  hideCtxMenu();
+}
+function ctxCopyPath(){
+  if(!_ctxNode||!_ctxNode.path)return;
+  navigator.clipboard.writeText(_ctxNode.path).then(function(){toast('Path copied','success',1500);}).catch(function(){});
+  hideCtxMenu();
+}
+function ctxDelete(){
+  if(!_ctxNode)return;
+  if(!confirm('Delete "'+_ctxNode.name+'"?'))return;
+  state.fileList=removeNode(state.fileList,_ctxNode.id);
+  closeFile(_ctxNode.id);state.projectDirty=true;renderExplorer();renderStatusbar();
+  hideCtxMenu();
+}
+
+/* ---------- ZIP Export progress helpers ---------- */
+var _exportCancelFlag=false;
+var _modalLocked=false;
+function showExportProgress(title,totalFiles){
+  _exportCancelFlag=false;
+  _modalLocked=true;
+  openModal('<div class="export-progress"><h3>📦 '+esc(title)+'</h3>'
+    +'<div class="bar-wrap"><div class="bar-fill" id="export-bar" style="width:0%"></div></div>'
+    +'<div class="stats" id="export-stats">Preparing '+totalFiles.toLocaleString()+' files...</div>'
+    +'<div class="task-log" id="export-log"></div>'
+    +'<div class="task-summary" id="export-summary" style="display:none"></div>'
+    +'<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
+    +'<button class="btn sm danger" onclick="_exportCancelFlag=true">Cancel</button>'
+    +'</div></div>');
+  return {
+    update:function(pct,stats){var b=$('#export-bar');var s=$('#export-stats');if(b)b.style.width=Math.round(pct)+'%';if(s)s.textContent=stats;},
+    logTask:function(msg,status){var log=$('#export-log');if(!log)return;var entry=document.createElement('div');entry.className='task-entry '+(status||'');entry.textContent=msg;log.appendChild(entry);log.scrollTop=log.scrollHeight;},
+    showSummary:function(items){var el=$('#export-summary');if(!el)return;el.style.display='block';var h='';items.forEach(function(item){h+='<div class="sum-row"><span class="sum-label">'+esc(item.label)+'</span><span>'+esc(item.value)+'</span></div>';});el.innerHTML=h;},
+    done:function(){_modalLocked=false;closeModal();},
+    isCancelled:function(){return _exportCancelFlag;}
+  };
+}
+async function collectFilesAsync(nodes,base,onProgress){
+  var out=[];
+  async function walk(ns,b){for(var i=0;i<ns.length;i++){var n=ns[i];var p=b?(b+'/'+n.name):n.name;if(n.type==='folder'){if(n.children)await walk(n.children,p);}else{out.push({name:p,content:n.content||''});}if(out.length%2000===0){onProgress(out.length);await yieldToUI();}}}
+  await walk(nodes,base);
+  return out;
+}
+async function nativeZipChunked(files,progress){
+  var encoder=new TextEncoder();var CHUNK=500;var total=files.length;var entries=[];var offset=0;
+  var hasCompression=typeof CompressionStream!=='undefined';
+  progress.logTask('Starting ZIP compression...','active');
+  progress.logTask(hasCompression?'Using deflate compression':'CompressionStream not available - storing uncompressed','');
+  for(var c=0;c<total;c+=CHUNK){
+    if(progress.isCancelled())throw new Error('Cancelled');
+    var end=Math.min(c+CHUNK,total);
+    for(var i=c;i<end;i++){var f=files[i];var data=encoder.encode(f.content||'');var compressed=data;var method=0;
+      if(hasCompression){try{var cs=new CompressionStream('deflate-raw');var w=cs.writable.getWriter();w.write(data);w.close();compressed=new Uint8Array(await new Response(cs.readable).arrayBuffer());method=8;}catch(e){}}
+      var nameBytes=encoder.encode(f.name);entries.push({nameBytes:nameBytes,data:data,compressed:compressed,method:method,crc:crc32(data),offset:offset});offset+=30+nameBytes.length+compressed.length;
+    }
+    progress.update(Math.round(end/total*80),'Compressing '+end.toLocaleString()+' / '+total.toLocaleString()+' files...');
+    progress.logTask('Compressed batch '+Math.ceil((c+1)/CHUNK)+' ('+end.toLocaleString()+' / '+total.toLocaleString()+')',c+CHUNK>=total?'done':'');
+    await yieldToUI();
+  }
+  progress.update(85,'Assembling ZIP archive...');progress.logTask('Building local file headers...','active');await yieldToUI();
+  var cdOffset=offset;var cdSize=0;for(var ei=0;ei<entries.length;ei++){cdSize+=46+entries[ei].nameBytes.length;}
+  var buf=new ArrayBuffer(cdOffset+cdSize+22);var v=new DataView(buf);var u8=new Uint8Array(buf);var pos=0;
+  var HEADER_CHUNK=1000;
+  for(var c2=0;c2<entries.length;c2+=HEADER_CHUNK){
+    var endH=Math.min(c2+HEADER_CHUNK,entries.length);
+    for(var i2=c2;i2<endH;i2++){var e=entries[i2];v.setUint32(pos,0x04034b50,true);pos+=4;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,e.method,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,e.crc,true);pos+=4;v.setUint32(pos,e.compressed.length,true);pos+=4;v.setUint32(pos,e.data.length,true);pos+=4;v.setUint16(pos,e.nameBytes.length,true);pos+=2;v.setUint16(pos,0,true);pos+=2;u8.set(e.nameBytes,pos);pos+=e.nameBytes.length;u8.set(e.compressed,pos);pos+=e.compressed.length;}
+    progress.update(85+Math.round(endH/entries.length*8),'Writing headers '+(c2+1)+'-'+endH+' / '+entries.length+'...');await yieldToUI();
+  }
+  progress.update(94,'Writing central directory...');progress.logTask('Building central directory...','active');await yieldToUI();
+  for(var i3=0;i3<entries.length;i3++){var e2=entries[i3];v.setUint32(pos,0x02014b50,true);pos+=4;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,20,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,e2.method,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,e2.crc,true);pos+=4;v.setUint32(pos,e2.compressed.length,true);pos+=4;v.setUint32(pos,e2.data.length,true);pos+=4;v.setUint16(pos,e2.nameBytes.length,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint32(pos,0,true);pos+=4;v.setUint32(pos,e2.offset,true);pos+=4;u8.set(e2.nameBytes,pos);pos+=e2.nameBytes.length;}
+  progress.update(98,'Finalizing archive...');await yieldToUI();
+  v.setUint32(pos,0x06054b50,true);pos+=4;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,0,true);pos+=2;v.setUint16(pos,entries.length,true);pos+=2;v.setUint16(pos,entries.length,true);pos+=2;v.setUint32(pos,cdSize,true);pos+=4;v.setUint32(pos,cdOffset,true);pos+=4;v.setUint16(pos,0,true);pos+=2;
+  progress.logTask('ZIP archive assembled successfully','done');
+  return new Blob([buf],{type:'application/zip'});
+}
 
 /* ---------- keyboard ---------- */
 function combo(e){let k=e.key.toLowerCase();if(k===' ')k='space';let c='';if(e.ctrlKey||e.metaKey)c+='ctrl+';if(e.altKey)c+='alt+';if(e.shiftKey)c+='shift+';c+=k;return c;}
