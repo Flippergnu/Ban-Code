@@ -117,4 +117,4 @@ ban-code-editor/
 ```
 
 > Requires internet for the Monaco editor and for ZIP export
-> . Everything else works offline.
+> Everything else works offline.
