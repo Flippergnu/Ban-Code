@@ -43,8 +43,7 @@ No build step. Just open `index.html` in a browser (internet needed on first loa
 - Smart drag-and-drop: dropping a project `.json` loads it as a project; extension `.json` installs.
 
 ### 🖼️ Media viewers & HTML live preview
-- **Images** (`png jpg jpeg gif webp bmp ico cur avif`) open in a viewer with
-  zoom in/out, fit, rotate and a checkerboard background — plus natural size info.
+- **Images** (`png jpg jpeg gif webp bmp ico cur avif`) open in a viewer — plus natural size info.
 - **Audio** (`mp3 wav ogg m4a flac aac opus`…) and **video** (`mp4 webm mov mkv`…)
   get native playback controls right in the editor area.
 - **HTML files** show a Code / Preview split bar: edit in Monaco or flip to a
