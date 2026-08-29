@@ -160,6 +160,13 @@
   .modal input[type=text]{width:100%;background:var(--inputBg);border:none;outline:none;color:var(--fg);padding:9px 12px;border-radius:6px;margin-bottom:12px}
   .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
   .modal textarea{width:100%;background:var(--bg);border:1px solid var(--inputBorder);outline:none;color:var(--fg);padding:10px;border-radius:6px;font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:120px;resize:vertical;white-space:pre}
+  .ban-dialog{width:100%}
+  .ban-dialog h2{font-size:16px;color:var(--fg);margin-bottom:7px}
+  .ban-dialog p{font-size:13px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .ban-dialog input{width:100%;background:var(--inputBg);border:1px solid var(--inputBorder);outline:none;color:var(--fg);padding:10px 12px;border-radius:6px;margin-bottom:12px}
+  .ban-dialog input:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .ban-dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+
 
   /* Extensions */
   .dropzone{border:2px dashed var(--cardBorder);border-radius:8px;padding:18px;text-align:center;color:var(--dim);font-size:13px;margin-bottom:10px;transition:.15s}
@@ -675,7 +682,15 @@ var _documentTreeHandler=function(e){
     const v3=btn.getAttribute('data-if');if(v3){ui.importFilesAt(v3);return;}
     const v4=btn.getAttribute('data-idir');if(v4){ui.importFolderAt(v4);return;}
     const v5=btn.getAttribute('data-rm');
-    if(v5){if(confirm('Delete this item?')){state.fileList=removeNode(state.fileList,v5);closeFile(v5);state.projectDirty=true;renderExplorer();renderStatusbar();}return;}
+    if(v5){
+      appConfirm('Delete this item?',ok=>{
+        if(ok){
+          state.fileList=removeNode(state.fileList,v5);closeFile(v5);
+          state.projectDirty=true;renderExplorer();renderStatusbar();
+        }
+      });
+      return;
+    }
     return;
   }
 
@@ -1310,7 +1325,7 @@ function runExtCommandById(id){const c=_extCommands.find(x=>x.id===id)||_extComm
 function runExtCommand(c){
   const A=c.arg;
   switch((c.type||'toast')){
-    case 'alert':alert(A??c.title);break;
+    case 'alert':appAlert(A??c.title);break;
     case 'toast':case 'message':case 'notify':toast(A||c.title,c.tone||'info');break;
     case 'terminal':termLines(typeof A==='string'?A:c.title,'term-info');if(!state.terminalVisible)toggleTerminal();break;
     case 'insert':insertAtCursor(A||'');break;
@@ -1826,13 +1841,94 @@ $('#palette-overlay').addEventListener('click',e=>{if(e.target.id==='palette-ove
 function openModal(html){$('#modal').innerHTML=html;$('#modal-overlay').classList.add('open');}
 function closeModal(){if(_modalLocked)return;$('#modal-overlay').classList.remove('open');}
 $('#modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay'&&!_modalLocked)closeModal();});
+/* ---------- Ban Code in-app dialogs ---------- */
+let _dialogCallback=null;
+
+function finishDialog(value){
+  const cb=_dialogCallback;
+  _dialogCallback=null;
+  closeModal();
+  if(typeof cb==='function')cb(value);
+}
+
+function appPrompt(title,defaultValue,callback,description=''){
+  _dialogCallback=callback;
+  openModal(
+    '<div class="ban-dialog">'+
+      '<h2>'+esc(title)+'</h2>'+
+      (description?'<p>'+esc(description)+'</p>':'')+
+      '<input id="ban-dialog-input" type="text" value="'+esc(defaultValue||'')+'" autocomplete="off" spellcheck="false">'+
+      '<div class="row">'+
+        '<button class="btn" id="ban-dialog-cancel">Cancel</button>'+
+        '<button class="btn primary" id="ban-dialog-ok">OK</button>'+
+      '</div>'+
+    '</div>'
+  );
+  const input=$('#ban-dialog-input');
+  if(input){
+    input.focus();
+    input.select();
+    input.onkeydown=e=>{
+      if(e.key==='Enter'){e.preventDefault();finishDialog(input.value);}
+      if(e.key==='Escape'){e.preventDefault();finishDialog(null);}
+    };
+  }
+  $('#ban-dialog-ok').onclick=()=>finishDialog(input?input.value:null);
+  $('#ban-dialog-cancel').onclick=()=>finishDialog(null);
+}
+
+function appConfirm(title,callback,description=''){
+  _dialogCallback=callback;
+  openModal(
+    '<div class="ban-dialog">'+
+      '<h2>'+esc(title)+'</h2>'+
+      (description?'<p>'+esc(description)+'</p>':'')+
+      '<div class="row">'+
+        '<button class="btn" id="ban-dialog-cancel">Cancel</button>'+
+        '<button class="btn danger" id="ban-dialog-ok">Confirm</button>'+
+      '</div>'+
+    '</div>'
+  );
+  $('#ban-dialog-ok').onclick=()=>finishDialog(true);
+  $('#ban-dialog-cancel').onclick=()=>finishDialog(false);
+}
+
+function appAlert(title,callback){
+  _dialogCallback=callback||function(){};
+  openModal(
+    '<div class="ban-dialog">'+
+      '<h2>'+esc(title)+'</h2>'+
+      '<div class="row"><button class="btn primary" id="ban-dialog-ok">OK</button></div>'+
+    '</div>'
+  );
+  $('#ban-dialog-ok').onclick=()=>finishDialog(true);
+}
+
 
 /* ---------- file io (open/save/export) ---------- */
 const ui={
-  newProject(){const name=prompt('Project name:','my-project');if(!name||!name.trim())return;const proj={name:name.trim(),version:'1.0.0',files:[]};state.fileList=[{id:uid(),name:proj.name,type:'folder',isOpen:true,children:[],path:proj.name}];state.projectJson=proj;state.lazyImport=false;state.projectDirty=true;renderExplorer();renderStatusbar();},
-  newFileAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('File name (e.g. index.html):','untitled.txt');if(name&&name.trim())createFile(name.trim(),'',null,parentId);},
+  newProject(){
+    appPrompt('New Project','my-project',name=>{
+      if(!name||!name.trim())return;
+      const proj={name:name.trim(),version:'1.0.0',files:[]};
+      state.fileList=[{id:uid(),name:proj.name,type:'folder',isOpen:true,children:[],path:proj.name}];
+      state.projectJson=proj;state.lazyImport=false;state.projectDirty=true;
+      renderExplorer();renderStatusbar();
+    });
+  },
+  newFileAt(parentId){
+    if(!state.fileList.length){toast('Open or create a project first','info');return;}
+    appPrompt('New File','untitled.txt',name=>{
+      if(name&&name.trim())createFile(name.trim(),'',null,parentId);
+    },'Example: index.html');
+  },
   newFile(){this.newFileAt(state.fileList[0]&&state.fileList[0].id||null);},
-  newFolderAt(parentId){if(!state.fileList.length){toast('Open or create a project first','info');return;}const name=prompt('Folder name:','new-folder');if(name&&name.trim())createFolder(name.trim(),parentId);},
+  newFolderAt(parentId){
+    if(!state.fileList.length){toast('Open or create a project first','info');return;}
+    appPrompt('New Folder','new-folder',name=>{
+      if(name&&name.trim())createFolder(name.trim(),parentId);
+    });
+  },
   newFolder(){this.newFolderAt(state.fileList[0]&&state.fileList[0].id||null);},
   installExtension(){$('#install-ext-input').click();},
   loadProjectJson(){$('#load-project-input').click();},
@@ -1850,7 +1946,14 @@ const ui={
     const node=findNode(state.fileList,f.id);
     if(node){node.content=content;state.projectDirty=true;renderStatusbar();}
   },
-  saveAs(){const f=currentOpen();if(!f)return toast('No file open','info');const n=prompt('Save as:',f.name);if(n&&n.trim()){download(n.trim(),f.content);f.name=n.trim();renderTabs();toast('Saved as '+n,'success');}},
+  saveAs(){
+    const f=currentOpen();if(!f)return toast('No file open','info');
+    appPrompt('Save As',f.name,n=>{
+      if(n&&n.trim()){
+        download(n.trim(),f.content);f.name=n.trim();renderTabs();toast('Saved as '+n,'success');
+      }
+    });
+  },
   closeActive(){if(state.activeFileId)closeFile(state.activeFileId);},
   closeAll(){state.openFiles.slice().forEach(f=>closeFile(f.id));toast('Closed all editors','info');},
   toggleSidebar(){state.sidebarVisible=!state.sidebarVisible;renderSidebar();},
@@ -1880,7 +1983,29 @@ const ui={
     const fontInput=$('#st-font');if(fontInput)fontInput.value=14;},
   resetSettings(){resetSettings();},
   closeModal(){_modalLocked=false;closeModal();},
-  clearAllData(){if(!confirm('Delete ALL data? This will remove all extensions, the workspace, and settings from browser storage. This cannot be undone.'))return;state.fileList=[];state.openFiles=[];state.activeFileId=null;state.projectJson=null;state.projectDirty=false;state.extensions=[];state.lazyImport=false;state.settings=Object.assign({},DEFAULT_SETTINGS);if(state.editor){state.editor.dispose();state.editor=null;}try{const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('ban.'))keys.push(k);}keys.forEach(k=>localStorage.removeItem(k));}catch(e){}rebuildExtensionRuntime();renderAll();applyTheme('ban-dark');toast('All data cleared — starting fresh','success');},
+  clearAllData(){
+    appConfirm(
+      'Delete ALL data?',
+      ok=>{
+        if(!ok)return;
+        state.fileList=[];state.openFiles=[];state.activeFileId=null;
+        state.projectJson=null;state.projectDirty=false;state.extensions=[];
+        state.lazyImport=false;state.settings=Object.assign({},DEFAULT_SETTINGS);
+        if(state.editor){state.editor.dispose();state.editor=null;}
+        try{
+          const keys=[];
+          for(let i=0;i<localStorage.length;i++){
+            const k=localStorage.key(i);
+            if(k.startsWith('ban.'))keys.push(k);
+          }
+          keys.forEach(k=>localStorage.removeItem(k));
+        }catch(e){}
+        rebuildExtensionRuntime();renderAll();applyTheme('ban-dark');
+        toast('All data cleared — starting fresh','success');
+      },
+      'This will remove all extensions, the workspace, and settings from browser storage. This cannot be undone.'
+    );
+  },
   exportZip(){exportZip();},
 };
 function download(name,content){const b=new Blob([content],{type:'text/plain'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
@@ -2330,12 +2455,18 @@ function ctxOpenFile(){if(_ctxNode&&_ctxNode.type==='file')openNode(_ctxNode);hi
 function ctxPreviewHtml(){if(!_ctxNode)return;openNode(_ctxNode);state.previewMode[_ctxNode.id]=!state.previewMode[_ctxNode.id];renderEditor();hideCtxMenu();}
 function ctxRename(){
   if(!_ctxNode)return;
-  var newName=prompt('Rename:',_ctxNode.name);
-  if(!newName||!newName.trim()||newName.trim()===_ctxNode.name)return;
-  _ctxNode.name=newName.trim();
-  if(_ctxNode.type==='file'){_ctxNode.language=langFromName(_ctxNode.name);var f=state.openFiles.find(function(x){return x.id===_ctxNode.id;});if(f)f.name=_ctxNode.name;}
-  if(_ctxNode.type==='file')_ctxNode.path=_ctxNode.path?_ctxNode.path.replace(/[^/]+$/,newName.trim()):newName.trim();
-  state.projectDirty=true;renderExplorer();renderTabs();hideCtxMenu();
+  appPrompt('Rename',_ctxNode.name,newName=>{
+    if(!newName||!newName.trim()||newName.trim()===_ctxNode.name)return;
+    _ctxNode.name=newName.trim();
+    if(_ctxNode.type==='file'){
+      _ctxNode.language=langFromName(_ctxNode.name);
+      var f=state.openFiles.find(function(x){return x.id===_ctxNode.id;});
+      if(f)f.name=_ctxNode.name;
+    }
+    if(_ctxNode.type==='file')
+      _ctxNode.path=_ctxNode.path?_ctxNode.path.replace(/[^/]+$/,newName.trim()):newName.trim();
+    state.projectDirty=true;renderExplorer();renderTabs();hideCtxMenu();
+  });
 }
 function ctxDuplicate(){
   if(!_ctxNode)return;
@@ -2350,10 +2481,14 @@ function ctxCopyPath(){
 }
 function ctxDelete(){
   if(!_ctxNode)return;
-  if(!confirm('Delete "'+_ctxNode.name+'"?'))return;
-  state.fileList=removeNode(state.fileList,_ctxNode.id);
-  closeFile(_ctxNode.id);state.projectDirty=true;renderExplorer();renderStatusbar();
-  hideCtxMenu();
+  const nodeId=_ctxNode.id;
+  const nodeName=_ctxNode.name;
+  appConfirm('Delete "'+nodeName+'"?',ok=>{
+    if(!ok)return;
+    state.fileList=removeNode(state.fileList,nodeId);
+    closeFile(nodeId);state.projectDirty=true;renderExplorer();renderStatusbar();
+    hideCtxMenu();
+  });
 }
 
 /* ---------- ZIP Export progress helpers ---------- */
